@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+coverage
+artifacts
+*.tsbuildinfo
+.env
+.env.local
+!.env.example
+*.log
+.vercel
+.netlify
+public/releases/*.dmg

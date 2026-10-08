@@ -1,0 +1,15 @@
+{"url":"https://docs.wisprflow.ai/articles/3152211871","origin":"Wispr Flow","state":"read","supports":"install, browser sign-in, permissions, mic test, shortcut, practice dictation"}
+{"url":"https://docs.wisprflow.ai/articles/6409258247","origin":"Wispr Flow","state":"read","supports":"first dictation, live recording cue, stop and cancel"}
+{"url":"https://wisprflow.ai/pricing","origin":"Wispr Flow","state":"read","supports":"free entry, paid dictation pricing and limits"}
+{"url":"https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex","origin":"OpenAI","state":"read","supports":"ChatGPT Work and Codex voice, tools, approvals, plan dependence"}
+{"url":"https://help.openai.com/en/articles/20001410-sign-in-with-chatgpt","origin":"OpenAI","state":"read","supports":"identity sign-in does not grant inference access"}
+{"url":"https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan","origin":"OpenAI","state":"read","supports":"Codex plan eligibility and usage limits"}
+{"url":"https://support.claude.com/en/articles/11101966-use-voice-mode","origin":"Anthropic","state":"read","supports":"voice and text in one conversation, push-to-talk, transcripts"}
+{"url":"https://support.claude.com/en/articles/16761823-claude-cowork-and-chat-are-one-claude","origin":"Anthropic","state":"read","supports":"merging chat and task modes"}
+{"url":"https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork","origin":"Anthropic","state":"read","supports":"task progress, review, local context requirements"}
+{"url":"https://www.raycast.com/changelog/macos/0-57","origin":"Raycast","state":"read","supports":"shortcut dictation, floating pill, live waveform, BYO API key comparison"}
+{"url":"https://www.raycast.com/pricing","origin":"Raycast","state":"read","supports":"free entry, bundled AI credits in paid plans"}
+{"url":"https://www.granola.ai/pricing","origin":"Granola","state":"read","supports":"focused free use and paid history/advanced capabilities"}
+{"url":"https://www.apple.com/newsroom/2026/09/siri-ai-a-profoundly-more-capable-and-personal-assistant-is-here/","origin":"Apple","state":"read","supports":"Siri AI beta on Mac, conversation, context, app actions, history"}
+{"url":"https://razorpay.com/docs/payments/subscriptions/plugins/magento/webhook-events/","origin":"Razorpay","state":"read","supports":"subscription event reconciliation requirements"}
+{"url":"https://supabase.com/docs/guides/database/secure-data","origin":"Supabase","state":"read","supports":"user-scoped access and server-side secrets"}

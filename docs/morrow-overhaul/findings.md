@@ -1,0 +1,12 @@
+# Evidence and interpretation
+
+Date checked: 24 September 2026.
+
+1. **Morrow currently tells two different stories.** The local homepage is for founder/solo-operator Mac workflows and demo booking. The subscription view offers Personal and Business seats. The intended audience in this brief is ordinary, often nontechnical consumers. Evidence: fresh local Chrome inspection; `website/components/MorrowWebsite.tsx`; `website/components/BillingPortal.tsx`. Interpretation: use a consumer voice-to-result story and one launch plan.
+2. **Native first run has too many gates.** Source orders activation, ChatGPT connection, permissions, preferences, and voice test. Fresh installed Pilot reached a Keychain reactivation error before the later screens could be used. Evidence: `src/ui/OnboardingFlow.tsx`, `src/onboarding-model.ts`, fresh Pilot UI. Interpretation: remove consumer code entry, defer task-specific permissions, fix clean-install credential storage.
+3. **Voice alone is no longer differentiation.** Wispr has a polished speech setup; ChatGPT and Claude support voice and tasks; Raycast adds a global voice entry point. Evidence: official sources listed in `sources.jsonl`. Interpretation: Morrow must win on a clear outcome and review in one accessible conversation. This is a product hypothesis, not measured superiority.
+4. **The proposed commercial model has a hard dependency.** OpenAI's Sign in with ChatGPT is an identity product; it does not provide inference rights. Codex plan eligibility does not establish third-party redistribution. Evidence: official OpenAI docs. Interpretation: verify authorization and distribution before a paid launch, or change the model and price.
+5. **Checkout and price are not ready to claim as public.** The site says Razorpay plans are unpublished. Current Personal preview is ₹3,499/month or ₹35,690/year, plus possible ChatGPT cost. Evidence: live local `/subscribe`, source. Interpretation: one consumer price after cost and willingness-to-pay testing; verified webhook-based entitlement before paid checkout.
+6. **The foundation should be kept.** Tauri, React, TypeScript, Rust, Next.js, Clerk, Supabase, and Razorpay are already present. Evidence: repository manifests and source. Interpretation: rework flows and state rather than rewriting the framework.
+
+Uncertainty: full live native task completion could not be observed because the installed Pilot hit activation/Keychain access. The illustrated site and app concepts are proposed UI, not runtime evidence.

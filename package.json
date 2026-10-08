@@ -1,0 +1,34 @@
+{
+  "name": "aestrum-skills4u-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "prebuild": "node scripts/validate-production-environment.mjs && node scripts/prepare-mac-download.mjs && node scripts/clear-next-output.mjs",
+    "build": "next build && node scripts/preserve-published-home.mjs && node scripts/write-static-headers.mjs",
+    "start": "next start",
+    "pretypecheck": "node scripts/clear-next-output.mjs",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clerk/react": "^6.16.1",
+    "@phosphor-icons/react": "2.1.10",
+    "@supabase/supabase-js": "2.112.4",
+    "gsap": "^3.15.0",
+    "lenis": "^1.3.26",
+    "next": "16.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.3",
+    "playwright-core": "^1.62.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
