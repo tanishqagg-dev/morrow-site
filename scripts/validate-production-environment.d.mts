@@ -7,3 +7,8 @@ export type ProductionEnvironmentValidation =
 export function validateProductionEnvironment(
   environment?: Record<string, string | undefined>,
 ): ProductionEnvironmentValidation;
+
+export function validateProductionBilling(
+  environment?: Record<string, string | undefined>,
+  fetchImpl?: typeof fetch,
+): Promise<void>;

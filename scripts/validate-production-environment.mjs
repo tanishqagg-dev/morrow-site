@@ -79,9 +79,22 @@ export function validateProductionEnvironment(environment = process.env) {
   return { enforced: true, siteOrigin, supabaseOrigin, clerkOrigin };
 }
 
+export async function validateProductionBilling(environment = process.env, fetchImpl = fetch) {
+  const configuration = validateProductionEnvironment(environment);
+  if (!configuration.enforced || environment.NEXT_PUBLIC_CHECKOUT_ENABLED === "false") return;
+  const response = await fetchImpl(`${environment.NEXT_PUBLIC_LICENSE_API_URL}/billing-catalog`, {
+    headers: { apikey: environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY },
+    redirect: "error", signal: AbortSignal.timeout(15000),
+  });
+  const catalog = await response.json();
+  if (!response.ok || catalog.mode !== "live" || !Array.isArray(catalog.plans) || !catalog.plans.length) {
+    throw new Error("Refusing production deploy: checkout requires a live billing service with published plans.");
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
-    validateProductionEnvironment();
+    await validateProductionBilling();
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

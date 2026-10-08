@@ -118,4 +118,4 @@ The public site includes an open-source notice linking the upstream GPL-3.0 proj
 
 Live site: https://morrow.aestrum.in. Netlify builds `main` with `npm run build` and publishes `out`. Push website changes here. Desktop and backend development remains in `tanishqagg-dev/jarvis-by-skills4u`. Environment files and Netlify state stay outside Git.
 
-Production currently uses the private beta page with `NEXT_PUBLIC_CHECKOUT_ENABLED=false` and no Clerk keys. Keep it disabled until production sign-in and billing are ready.
+Production uses `NEXT_PUBLIC_CHECKOUT_ENABLED=true`, the production Clerk application at `clerk.morrow.aestrum.in`, and the Morrow Production Supabase project `vrakjxelgjdolmrttvlm`. Keep production environment settings in Netlify. Local test settings must not replace them. The production build verifies that billing reports live mode with published plans before enabling checkout.
