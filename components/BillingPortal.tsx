@@ -3,7 +3,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClerkProvider, UserButton, useAuth, useClerk, useUser } from "@clerk/react";
 import { ArrowRight, CheckCircle, CreditCard, SpinnerGap } from "@phosphor-icons/react";
-import { billingQuote, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, rupees } from "@/lib/billing";
+import { billingQuote, firstPaymentQuote, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, rupees } from "@/lib/billing";
 import type { BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription } from "@/lib/billing";
 import styles from "./SubscriptionFlow.module.css";
 import { BillingJourney } from "./BillingJourney";
@@ -24,7 +24,7 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
 }
 
-type CheckoutReply = { subscriptionId: string; keyId: string; email: string; name: string; paymentMethod?: "upi" };
+type CheckoutReply = { subscriptionId: string; keyId: string; email: string; name: string; paymentMethod?: "upi" | "card" };
 
 
 type CustomerIdentity = {
@@ -114,7 +114,8 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
   const selectedAccountRef = useRef("");
   const refreshSequence = useRef(0);
   const [couponCode, setCouponCode] = useState("");
-  const [coupon, setCoupon] = useState<{ code: string; unitAmountPaise: number; duration?: string; accessDays?: number; chargeAmountPaise?: number; renewalAmountPaise?: number; context: string } | null>(null);
+  const [couponPaymentMethod, setCouponPaymentMethod] = useState<"upi" | "card">("upi");
+  const [coupon, setCoupon] = useState<{ code: string; unitAmountPaise: number; duration?: string; accessDays?: number; chargeAmountPaise?: number; renewalAmountPaise?: number; paymentMethods?: Array<"upi" | "card">; context: string } | null>(null);
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [paymentMode, setPaymentMode] = useState<"test" | "live" | null>(null);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
@@ -260,9 +261,14 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
   const gstBenefitTotal = activePlan?.amountPaise ?? 0;
   const gstBenefitBase = gstBenefitTotal - Math.round(gstBenefitTotal * 18 / 118);
   const unitPrice = gstBenefit ? gstBenefitBase : appliedCoupon?.unitAmountPaise ?? activePlan?.amountPaise ?? previewPrices[audience][period];
-  const { base: quote, gst, total: totalCharge } = billingQuote(unitPrice,
+  const recurringQuote = billingQuote(unitPrice,
     audience === "company" ? seats : 1,
     gstBenefit ? gstBenefitTotal : appliedCoupon ? appliedCoupon.chargeAmountPaise : activePlan ? activePlan.chargeAmountPaise : undefined);
+  // Introductory quotes already contain the aggregate first payment for all seats.
+  const firstTotal = appliedCoupon?.duration === "first_cycle" ? appliedCoupon.chargeAmountPaise : undefined;
+  const { base: quote, gst, total: totalCharge } = firstTotal === undefined ? recurringQuote : firstPaymentQuote(firstTotal);
+  const renewalPeriod = period === "yearly" ? "year" : "month";
+  const firstPaymentTerms = appliedCoupon?.duration === "first_cycle" ? `First payment only. Then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod} including GST.` : "";
   const billedSeats = audience === "company" ? seats : 1;
   const monthlyPrice = plans.find((plan) => plan.audience === audience && plan.period === "monthly")?.amountPaise ?? previewPrices[audience].monthly;
   const yearlyPrice = plans.find((plan) => plan.audience === audience && plan.period === "yearly")?.amountPaise ?? previewPrices[audience].yearly;
@@ -298,12 +304,13 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
     event.preventDefault();
     void run("coupon", async () => {
       if (!matchingAccount) throw new Error("Your account is still loading. Try again in a moment.");
-      const result = await billingRequest<{ code: string; unitAmountPaise: number; duration?: string; accessDays?: number; chargeAmountPaise?: number; renewalAmountPaise?: number }>("billing-customer", {
+      const result = await billingRequest<{ code: string; unitAmountPaise: number; duration?: string; accessDays?: number; chargeAmountPaise?: number; renewalAmountPaise?: number; paymentMethods?: Array<"upi" | "card"> }>("billing-customer", {
         action: "quote_coupon", accountId: selectedAccountId, planId: activePlan?.id,
         quantity: billedSeats, couponCode: couponCode.trim(),
       }, await authToken());
       setCoupon({ ...result, context: couponContext });
-      setNotice(result.duration === "fixed" ? `Admin coupon applied: ${result.accessDays} days of access. It will not renew.` : result.duration === "first_cycle" ? `First month ${rupees(result.chargeAmountPaise!)} including GST with UPI. Then ${rupees(result.renewalAmountPaise!)} per month including GST until cancelled.` : "Coupon applied. This price continues for the life of this subscription.");
+      setCouponPaymentMethod(result.paymentMethods?.[0] || "upi");
+      setNotice(result.duration === "fixed" ? `Admin coupon applied: ${result.accessDays} days of access. It will not renew.` : result.duration === "first_cycle" ? `First payment ${rupees(result.chargeAmountPaise!)} including GST. Then ${rupees(result.renewalAmountPaise!)} per ${renewalPeriod} including GST until cancelled.` : "Coupon applied. This price continues for the life of this subscription.");
     });
   };
 
@@ -346,13 +353,14 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
     const result = await billingRequest<CheckoutReply>("billing-customer", {
       action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
       quantity: audience === "company" ? seats : 1, requestId, couponCode: appliedCoupon?.code, inviteCode,
+      ...(appliedCoupon?.duration === "first_cycle" ? {paymentMethod: couponPaymentMethod} : {}),
     }, await authToken());
     if (!window.Razorpay) throw new Error("Razorpay checkout could not be opened.");
     if (checkoutUser !== activeUserId.current) return;
     let outcome: "open" | "failed" | "confirming" = "open";
     const checkout = new window.Razorpay({
       key: result.keyId, subscription_id: result.subscriptionId, name: "Morrow",
-      ...(result.paymentMethod === "upi" ? {config: {display: {blocks: {upi: {name: "Pay ₹1 with UPI", instruments: [{method: "upi"}]}}, sequence: ["block.upi"], preferences: {show_default_blocks: false}}}} : {}),
+      ...(result.paymentMethod ? {config: {display: {blocks: {selected: {name: result.paymentMethod === "upi" ? "Pay with UPI" : "Pay with credit or debit card", instruments: [{method: result.paymentMethod}]}}, sequence: ["block.selected"], preferences: {show_default_blocks: false}}}} : {}),
       description: `${audience === "company" ? `${seats} business seats` : "Personal"} · ${period}`,
       prefill: { email: result.email }, theme: { color: "#18181b" },
       handler: (response: unknown) => {
@@ -521,7 +529,7 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
       <div className={styles.plan} aria-label="Your plan">
         <div className={styles.planHeading}><h2>Morrow {audience === "company" ? "Business" : "Personal"}</h2><span>For {audience === "company" ? "your team" : "you"}</span></div>
         <p className={styles.price}>{appliedCoupon?.duration === "fixed" ? "No charge" : rupees(monthlyEquivalent)}{appliedCoupon?.duration !== "fixed" && <span>/ month including GST</span>}</p>
-        <p className={styles.termNote}>{appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : period === "yearly" ? `${rupees(totalCharge)} billed yearly, including GST.` : appliedCoupon?.duration === "first_cycle" ? `UPI only. First month only. Then ${rupees(appliedCoupon.renewalAmountPaise!)} per month including GST. Cancel renewal anytime.` : "Billed monthly. Cancel renewal anytime."}</p>
+        <p className={styles.termNote}>{appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : appliedCoupon?.duration === "first_cycle" ? `${firstPaymentTerms} Cancel renewal anytime.` : period === "yearly" ? `${rupees(totalCharge)} billed yearly, including GST.` : "Billed monthly. Cancel renewal anytime."}</p>
         <ul className={styles.benefits}>
           <li><CheckCircle aria-hidden="true" />Voice and text on your Mac</li>
           <li><CheckCircle aria-hidden="true" />Work with files and connected apps</li>
@@ -535,7 +543,7 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
             <div className={styles.inputRow}><input id="billing-coupon" value={couponCode} placeholder="Enter code" autoCapitalize="characters" autoComplete="off" maxLength={32}
               disabled={Boolean(busy) || checkoutOpen} onChange={(event) => rememberCoupon(event.target.value.toUpperCase())} />
               <button type="submit" disabled={Boolean(busy) || checkoutOpen || !couponCode.trim() || !matchingAccount}>{busy === "coupon" ? "Checking…" : "Apply"}</button></div>
-            {appliedCoupon && <p role="status">{appliedCoupon.duration === "fixed" ? `${appliedCoupon.accessDays} days of access applied.` : appliedCoupon.duration === "first_cycle" ? `UPI only. First month only. Then ${rupees(appliedCoupon.renewalAmountPaise!)} per month including GST.` : "Discount applied to every renewal."} <button type="button" onClick={() => rememberCoupon("")}>Remove</button></p>}
+            {appliedCoupon && <p role="status">{appliedCoupon.duration === "fixed" ? `${appliedCoupon.accessDays} days of access applied.` : appliedCoupon.duration === "first_cycle" ? firstPaymentTerms : "Discount applied to every renewal."} <button type="button" onClick={() => rememberCoupon("")}>Remove</button></p>}
           </form>
         </details>
   <details className={styles.management}><summary>Business invoice (optional)</summary>
@@ -555,10 +563,16 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
         </dl>
         {paymentMode === "test" && <p className={styles.notice}>Test checkout. No real money is collected.</p>}
         {!activePlan && appliedCoupon?.duration !== "fixed" && <p className={styles.notice} role="status">{catalogState === "loading" ? "Loading plans…" : "This plan is not available for checkout yet. Choose another billing period or try again later."}</p>}
+        {appliedCoupon?.duration === "first_cycle" && <label className={styles.field}>
+          Payment method
+          <select aria-label="Payment method" value={couponPaymentMethod} disabled={Boolean(busy) || checkoutOpen} onChange={event => setCouponPaymentMethod(event.target.value as "upi" | "card")}>
+            {(appliedCoupon.paymentMethods || ["upi"]).map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
+          </select>
+        </label>}
         <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || (!activePlan && appliedCoupon?.duration !== "fixed")}>
           {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>Continue to payment <ArrowRight /></>}
         </button>
-        <p className={styles.finePrint}>{appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} including GST for your first month with UPI, then ${rupees(appliedCoupon.renewalAmountPaise!)} per month including GST until cancelled. The GSTIN discount does not combine with this coupon.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Renewals continue until you cancel.`}</p>
+        <p className={styles.finePrint}>{appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} including GST for your first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod} including GST until cancelled. The GSTIN discount does not combine with this coupon.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Renewals continue until you cancel.`}</p>
         <p className={styles.finePrint}>Full refund within 7 days of your first payment. <a href="/refunds">Refund policy</a>.</p>
         <p className={styles.finePrint}>By subscribing, you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>. This is beta software; features may change or have bugs.</p>
         {desktopRequest && <p className={styles.finePrint}>After payment, the Mac where you started sign-in will connect automatically. Continue only if this is your Mac.</p>}

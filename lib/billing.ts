@@ -140,3 +140,9 @@ export function billingQuote(basePaise: number, quantity = 1, chargePaise?: numb
   const total = (chargePaise ?? basePaise + Math.round(basePaise * 18 / 100)) * quantity;
   return { base, gst: total - base, total };
 }
+
+// The backend introductory amount is the inclusive total for the whole subscription.
+export function firstPaymentQuote(total: number) {
+  const gst = Math.round(total * 18 / 118);
+  return { base: total - gst, gst, total };
+}
