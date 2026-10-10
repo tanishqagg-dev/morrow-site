@@ -1,6 +1,7 @@
 import { chromium } from '/Users/tanishqaggarwal/Documents/ChatGPT/3.0/nivra-vision-lab/node_modules/playwright/index.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
-const evidence = '/Users/tanishqaggarwal/Desktop/projects/morrow-glowup/qa/site';
+const round2 = process.env.QA_ROUND2 === '1';
+const evidence = `/Users/tanishqaggarwal/Desktop/projects/morrow-glowup/qa/site${round2 ? '/round2' : ''}`;
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const plan = { id: 'qa-plan', code: 'PERSONAL_MONTHLY', name: 'Morrow Personal', audience: 'personal', period: 'monthly', amountPaise: 299900, chargeAmountPaise: 353882, currency: 'INR', minimumQuantity: 1 };
@@ -15,8 +16,8 @@ async function setup(state, width) {
   const goto = page.goto.bind(page); page.goto = (url, options) => goto(url, { waitUntil: 'domcontentloaded', ...options });
   console.log(`Audit ${state} ${width}`);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  let purchased = false, granted = false, canceled = false, snapshotCount = 0, checkoutCount = 0, approvals = 0, options;
-  const paid = ['trialing','trial-canceled','paid','ready','cancel'].includes(state);
+  let purchased = false, granted = false, canceled = false, snapshotCount = 0, checkoutCount = 0, cancelCount = 0, approvals = 0, options;
+  const paid = ['trialing','trial-canceled','paid','ready','cancel','cancel-failed'].includes(state);
   const subscription = () => ({ id: 'sub-a', account_id: 'account-a', plan_id: 'qa-plan', razorpay_subscription_id: 'sub_qa', access_source: state === 'paid' ? 'payment' : 'trial',
     status: state === 'paid' ? 'active' : state === 'trial-canceled' || canceled ? 'trial_canceled' : state === 'expired' ? 'expired' : 'trialing',
     quantity: 1, scheduled_quantity: null, paid_until: state === 'expired' ? '2026-10-01T00:00:00Z' : date, trial_ends_at: state === 'paid' ? null : date, cancel_at_period_end: false,
@@ -30,18 +31,18 @@ async function setup(state, width) {
     if (request.url().endsWith('/billing-catalog')) payload = { mode: 'live', plans: state === 'empty' ? [] : [plan], betaInviteRequired: state === 'invite', trial: { enabled: state !== 'trial-off', days: 7 } };
     else if (action === 'snapshot') {
       snapshotCount++;
-      if (desktopOnly && body.desktopRequestId !== desktopId) throw new Error('Snapshot lost desktop installation eligibility');
+      if ((desktopOnly || (round2 && state === 'trial')) && body.desktopRequestId !== desktopId) throw new Error('Snapshot lost desktop installation eligibility');
       if (state === 'error' && snapshotCount === 1) return route.fulfill({ status: 503, json: { error: { message: 'Your account is temporarily unavailable. Please try again.' } } });
       payload = snapshot();
     } else if (action === 'checkout') {
       checkoutCount++;
-      if (desktopOnly && (body.desktopRequestId !== desktopId || body.requestId === desktopId || body.trial !== true)) throw new Error('Checkout lost the separate desktop request or trial flag');
+      if ((desktopOnly || (round2 && state === 'trial')) && (body.desktopRequestId !== desktopId || body.requestId === desktopId || body.trial !== true)) throw new Error('Checkout lost the separate desktop request or trial flag');
       if (state === 'expired-checkout' && checkoutCount === 1) return route.fulfill({ status: 410, json: { error: { code: 'TRIAL_CHECKOUT_EXPIRED', message: 'Checkout expired.' } } });
       if (state === 'rejected-trial') return route.fulfill({ status: 409, json: { error: { code: 'TRIAL_NOT_AVAILABLE', message: 'This trial is unavailable.' } } });
       payload = { subscriptionId: 'sub_qa', keyId: 'rzp_test_qa', email: 'qa@example.test', name: 'QA', trialEndsAt: body.trial ? date : null, amountPaise: 353882 };
     } else if (action === 'confirm_checkout') { purchased = true; payload = {}; }
     else if (action === 'approve_desktop') { approvals++; payload = {}; }
-    else if (action === 'cancel') { canceled = true; payload = {}; }
+    else if (action === 'cancel') { cancelCount++; if (state === 'cancel-failed' && cancelCount === 1) return route.fulfill({status:409,json:{error:{code:'CANCELLATION_VERIFICATION_FAILED',message:'Unconfirmed cancellation.'}}}); canceled = true; payload = {}; }
     else if (action === 'invoices') payload = { invoices: [{ id: 'invoice-a', number: 'MOR-001', status: 'paid', amountPaise: 353882, paidAt: date, url: 'https://example.test/invoice' }] };
     await route.fulfill({ json: payload });
   });
@@ -59,23 +60,24 @@ async function capture(flow, state, width, label = state) {
 }
 try {
 for (const width of [1440, 390]) {
-  for (const state of desktopOnly ? [] : ['trial-on', 'trial-off']) {
+  for (const state of desktopOnly || round2 ? [] : ['trial-on', 'trial-off']) {
     const flow = await setup(state, width); await flow.page.goto('http://localhost:4390/');
     await flow.page.locator('[data-plan-price]').filter({ hasText: '2,999' }).waitFor();
     await capture(flow, state, width, `home-${state}`);
     await flow.context.close();
   }
-  for (const state of desktopOnly ? [] : ['download', 'download-started']) {
-    const flow = await setup(state, width); await flow.page.goto(`http://localhost:4390/download${state === 'download-started' ? '?start=1' : ''}`);
-    await flow.page.getByRole('heading', { name: state === 'download-started' ? 'Your download has started' : 'Download Morrow for Mac', exact: true }).waitFor();
-    await capture(flow, state, width); await flow.page.getByText('Verify your download (SHA-256)').click(); await capture(flow, state, width, `${state}-checksum`);
+  for (const state of desktopOnly ? [] : round2 ? ['download-trial-on', 'trial-off'] : ['download', 'download-started']) {
+    const flow = await setup(state, width); await flow.page.goto(`http://localhost:4390/download${round2 || state === 'download-started' ? '?start=1' : ''}`);
+    await flow.page.getByRole('heading', { name: round2 || state === 'download-started' ? 'Your download has started' : 'Download Morrow for Mac', exact: true }).waitFor();
+    if (round2) { await flow.page.getByText(state === 'trial-off' ? 'Press \"Subscribe\".' : 'Press \"Start free trial\".', {exact:false}).waitFor(); if (state === 'trial-off') await flow.page.getByRole('heading',{name:'Setup walkthrough.'}).waitFor(); else if (await flow.page.getByRole('heading',{name:'Setup walkthrough.'}).count()) throw new Error('Old checkout video shown during trial'); }
+    await capture(flow, state, width); await flow.page.getByText('Release details and SHA-256').click(); await capture(flow, state, width, `${state}-checksum`);
     if (state === 'download-started') { await flow.page.reload(); await flow.page.getByText('Already started in this session.', { exact: false }).waitFor(); }
     await flow.context.close();
   }
-  for (const state of desktopOnly ? ['trial'] : ['closed','loading','error','invite','trial-off','trial','ineligible','empty','trialing','trial-canceled','paid','expired','ready','cancel','rejected-trial','expired-checkout']) {
+  for (const state of desktopOnly ? ['trial'] : round2 ? ['trial','trial-off','cancel-failed'] : ['closed','loading','error','invite','trial-off','trial','ineligible','empty','trialing','trial-canceled','paid','expired','ready','cancel','rejected-trial','expired-checkout']) {
     const flow = await setup(state, width);
-    const accountView = ['trialing','trial-canceled','paid','expired','cancel'].includes(state);
-    const desktop = state === 'ready' || desktopOnly ? `&desktop=${desktopId}` : '';
+    const accountView = ['trialing','trial-canceled','paid','expired','cancel','cancel-failed'].includes(state);
+    const desktop = state === 'ready' || desktopOnly || (round2 && state === 'trial') ? `&desktop=${desktopId}` : '';
     await flow.page.goto(`http://localhost:4390/subscribe?qa=${state}${accountView ? '&view=subscription' : ''}${desktop}`);
     const titles = { closed: 'Your work, with Morrow.', loading: 'Getting your account ready.', error: 'Your account could not be loaded.', invite: 'Your invitation to Morrow.', ready: "You're in. Morrow is unlocking now." };
     await flow.page.getByRole('heading', { name: titles[state] || (accountView ? 'Your subscription' : ['trial-off','ineligible'].includes(state) ? 'Subscribe to Morrow.' : 'Start your 7-day free trial.'), exact: true }).waitFor();
@@ -92,16 +94,27 @@ for (const width of [1440, 390]) {
         await flow.page.getByRole('button', { name: 'Set up UPI AutoPay' }).click();
         await flow.page.getByRole('heading', { name: 'Confirming with your bank.' }).waitFor(); await capture(flow,state,width,'subscribe-confirming');
         if (flow.checkoutCount !== 1) throw new Error('Authorization recreated checkout');
-        flow.grant(); await flow.page.getByRole('heading', { name: desktopOnly ? "You're in. Morrow is unlocking now." : 'Your Morrow is ready.' }).waitFor({timeout:15000}); await capture(flow,state,width,'subscribe-success');
-        if (desktopOnly) { await flow.page.locator('a[href="morrow://auth-complete"]').waitFor(); if (flow.approvals !== 1) throw new Error('Trial desktop approval must happen once'); }
+        flow.grant(); await flow.page.getByRole('heading', { name: desktopOnly || round2 ? "You're in. Morrow is unlocking now." : 'Your Morrow is ready.' }).waitFor({timeout:15000}); await capture(flow,state,width,'subscribe-success');
+        if (desktopOnly || round2) { await flow.page.locator('a[href="morrow://auth-complete"]').waitFor(); if (flow.approvals !== 1) throw new Error('Trial desktop approval must happen once'); }
       }
+    }
+    if (state === 'cancel-failed') {
+      await flow.page.getByRole('button',{name:'Cancel trial',exact:true}).click();
+      await flow.page.getByRole('button',{name:'Cancel trial',exact:true}).click();
+      await flow.page.getByText("We couldn't confirm the cancellation with Razorpay. Nothing changed. Try again in a minute.",{exact:true}).waitFor();
+      if (await flow.page.getByText('Trial canceled',{exact:false}).count()) throw new Error('Failed cancellation falsely shown as canceled');
+      await flow.page.getByRole('button',{name:'Retry cancellation',exact:true}).waitFor();
+      await capture(flow,state,width,'subscribe-cancel-unconfirmed');
+      await flow.page.getByRole('button',{name:'Retry cancellation',exact:true}).click();
+      await flow.page.getByText('Trial canceled. Access until',{exact:false}).waitFor();
+      await capture(flow,state,width,'subscribe-cancel-retried');
     }
     if (state === 'cancel') { await flow.page.getByRole('button', { name: 'Cancel trial', exact:true }).click(); await capture(flow,state,width,'subscribe-cancel-confirmation'); await flow.page.getByRole('button',{name:'Cancel trial',exact:true}).click(); await flow.page.getByText("Trial canceled. Access until",{exact:false}).waitFor(); await capture(flow,state,width,'subscribe-cancel-complete'); }
     if (state === 'ready') { await flow.page.locator('a[href="morrow://auth-complete"]').waitFor(); if(flow.approvals !== 1) throw new Error('Desktop must approve once'); }
     if (state === 'paid') { await flow.page.getByText('Payments and invoices',{exact:true}).click(); await flow.page.getByRole('button',{name:'Load invoices'}).click(); await flow.page.getByText('MOR-001').waitFor(); await capture(flow,state,width,'subscribe-invoices'); }
     await flow.context.close();
   }
-  if (desktopOnly) continue;
+  if (desktopOnly || round2) continue;
   const flow = await setup('signed-out',width); await flow.page.goto('http://localhost:4390/subscribe');
   await flow.page.waitForTimeout(8000); await capture(flow,'signed-out',width,'subscribe-clerk');
   await flow.context.close();
