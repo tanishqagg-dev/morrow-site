@@ -119,7 +119,7 @@ test('account refresh scopes recovery to the selected account and keeps initial 
     const bindings = { activeUserId: { current: 'qa-user' }, selectedAccountRef, refreshSequence: { current: 0 },
       authToken: async () => 'test-session', billingRequest,
       identityRef: { current: { email: 'qa@example.test' } },
-      setSnapshot: vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined,
+      setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined,
       useCallback: (callback: () => Promise<unknown>) => callback,
     };
     const start = source.indexOf('const refresh = useCallback');

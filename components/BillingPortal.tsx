@@ -9,6 +9,7 @@ import styles from "./SubscriptionFlow.module.css";
 import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
+import { billingAuthToken } from "@/lib/billing-auth";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 const previewPrices = {
@@ -119,6 +120,8 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
   const [catalogState, setCatalogState] = useState<"loading" | "ready" | "error">("loading");
   const [paymentMode, setPaymentMode] = useState<"test" | "live" | null>(null);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
+  const [snapshotFailed, setSnapshotFailed] = useState(false);
+  const [authTimedOut, setAuthTimedOut] = useState(false);
   const [snapshot, setSnapshot] = useState<BillingSnapshot | null>(null);
   const [audience, setAudience] = useState<"personal" | "company">("personal");
   const [period, setPeriod] = useState<"monthly" | "yearly">("monthly");
@@ -162,6 +165,12 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
     } catch { setPaymentPending(false); setPaymentDesktopRequest(""); }
   }, [pendingKey]);
   const [error, setError] = useState("");
+  useEffect(() => {
+    setAuthTimedOut(false);
+    if (identity?.loaded !== false) return;
+    const timer = setTimeout(() => setAuthTimedOut(true), 20_000);
+    return () => clearTimeout(timer);
+  }, [identity?.loaded]);
 
   useEffect(() => {
     try {
@@ -193,9 +202,7 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
   };
 
   const authToken = useCallback(async () => {
-    const token = await identityRef.current?.getToken();
-    if (!token) throw new Error("Sign in to your Morrow account first.");
-    return token;
+    return billingAuthToken(() => identityRef.current?.getToken() ?? Promise.resolve(null));
   }, []);
 
   useEffect(() => {
@@ -225,10 +232,13 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
         next = await billingRequest<BillingSnapshot>("billing-customer", {action:"snapshot",accountId:accountId || undefined}, token);
       }
       if (!stillCurrent()) return;
+      setSnapshotFailed(false);
       setSnapshot(next);
       setSelectedAccountId((current) => next.accounts.some((account) => account.id === current) ? current : next.accounts.find((account) => paidSeatForAccount(next, account.id, identityRef.current?.email || null))?.id || next.accounts.find((account) => account.kind === "personal")?.id || "");
       return next;
-    } catch (caught) { if (stillCurrent()) throw caught; }
+    } catch (caught) {
+      if (stillCurrent()) { setSnapshotFailed(true); throw caught; }
+    }
   }, [authToken]);
 
   useEffect(() => {
@@ -426,6 +436,7 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
   const connectDesktop = (seat: BillingSeat) => void run("connect-desktop", () => approveDesktop(seat));
 
   const refreshAccess = () => void run("refresh", async () => {
+    if (identityRef.current?.loaded === false) { window.location.reload(); return; }
     const userId = activeUserId.current;
     const latest = await refresh();
     if (latest && paidSeatForAccount(latest, selectedAccountId, identityRef.current?.email || null)) {
@@ -458,7 +469,7 @@ export function BillingPortalContent({ identity, accountControl }: { identity: C
     return () => { stopped = true; clearTimeout(timer); };
   }, [paymentPending, pendingKey]);
 
-  const stage = subscriptionStage({ loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
+  const stage = subscriptionStage({ loadFailed: authTimedOut || snapshotFailed, loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
     hasPaidAccess, paymentPending, manageAccount, inviteRequired: snapshot?.betaInviteRequired ?? siteConfig.betaMode, inviteAccepted });
 
   const assignSeat = (event: React.FormEvent<HTMLFormElement>) => {

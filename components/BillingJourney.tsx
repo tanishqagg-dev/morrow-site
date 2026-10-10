@@ -16,7 +16,7 @@ type Props = {
 
 export function BillingJourney(props: Props) {
   const { stage, email, busy, desktopRequest, desktopConnected } = props;
-  const activeStep = stage === "sign-in" || stage === "loading" ? 0 : stage === "invite" || stage === "plan" ? 1 : stage === "confirming" ? 2 : 3;
+  const activeStep = stage === "sign-in" || stage === "loading" || stage === "unavailable" ? 0 : stage === "invite" || stage === "plan" ? 1 : stage === "confirming" ? 2 : 3;
   return <div className={styles.site}>
     <header className={styles.header}>
       <a href="/" aria-label="Morrow home"><img src="/morrow/wordmark.png" alt="morrow" width="118" height="39" /></a>
@@ -31,6 +31,12 @@ export function BillingJourney(props: Props) {
       {stage === "account" && <button className={styles.back} onClick={props.onBack}><ArrowLeft /> Back to Morrow</button>}
       {props.error && <div role="alert" className={styles.error}>{props.error}</div>}
       {props.notice && <p role="status" className={styles.notice}>{props.notice}</p>}
+      {stage === "unavailable" && <section className={styles.state}>
+        <h1>Your account could not be loaded.</h1>
+        <p>Check your connection and try again. If you already paid, check your account before starting another payment.</p>
+        <button className={styles.secondary} onClick={props.onRefresh} disabled={busy}>{busy ? "Checking…" : "Try again"}</button>
+        <a className={styles.supportNote} href={`${help}?subject=Morrow%20account%20loading`}>Get help</a>
+      </section>}
       {stage === "loading" && <section className={styles.state} aria-busy="true" aria-live="polite">
         <SpinnerGap className={styles.spin} size={28} /><h1>Getting your account ready.</h1><p>This should only take a moment.</p>
         {props.error && <button className={styles.secondary} onClick={props.onRefresh} disabled={busy}>Try again</button>}

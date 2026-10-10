@@ -1,6 +1,6 @@
 import type { BillingSnapshot } from "./billing";
 
-export type SubscriptionStage = "loading" | "sign-in" | "invite" | "plan" | "confirming" | "ready" | "account";
+export type SubscriptionStage = "loading" | "unavailable" | "sign-in" | "invite" | "plan" | "confirming" | "ready" | "account";
 
 export function paymentPollDelay(attempt: number) {
   return Math.min(60_000, 5_000 * 2 ** Math.min(attempt, 4));
@@ -10,7 +10,9 @@ export function subscriptionStage(input: {
   loaded: boolean; signedIn: boolean; snapshotLoaded: boolean;
   hasPaidAccess: boolean; paymentPending: boolean; manageAccount: boolean;
   inviteRequired?: boolean; inviteAccepted?: boolean;
+  loadFailed?: boolean;
 }): SubscriptionStage {
+  if (input.loadFailed && (!input.loaded || (input.signedIn && !input.snapshotLoaded))) return "unavailable";
   if (!input.loaded) return "loading";
   if (!input.signedIn) return "sign-in";
   if (!input.snapshotLoaded) return "loading";
