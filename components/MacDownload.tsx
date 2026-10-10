@@ -15,7 +15,7 @@ export function MacDownload() {
       document.body.appendChild(link);
       link.click(); link.remove();
       setStarted(true);
-      setMessage('Check your browser downloads. Open the DMG when it finishes.');
+      setMessage('');
     } catch { setMessage('Your browser could not start the download. Use the link below.'); }
   }, []);
   useEffect(() => {
@@ -34,10 +34,10 @@ export function MacDownload() {
     <h1 className={styles.title}>{started ? 'Your download has started' : 'Download Morrow for Mac'}</h1>
     <p className={styles.downloadIntro}>A little setup. Then a lot less busywork.</p>
     <div className={styles.downloadActions}>
-      {started ? <p>Download didn&apos;t start? <button className={styles.retry} onClick={download}>Try again</button></p> : <button className={styles.downloadButton} onClick={download}>Download for Mac ↓</button>}
-      <p role="status" className={styles.downloadStatus}>{message}</p>
-      <p><a href={release.zipDownloadUrl}>Download ZIP instead</a><span className={styles.releaseInfo}>Morrow {release.version} · {Math.round(release.bytes / 1_000_000)} MB</span></p>
-      <details className={styles.checksum}><summary>Verify your download (SHA-256)</summary><p>DMG</p><code>{release.sha256}</code><p>ZIP (contains the DMG)</p><code>{release.zipSha256}</code></details>
+      {!started && <button className={styles.downloadButton} onClick={download}>Download for Mac ↓</button>}
+      <p className={styles.downloadLinks}>{started && <>Download didn&apos;t start? <button className={styles.retry} onClick={download}>Try again</button><span aria-hidden="true"> · </span></>}<a href={release.zipDownloadUrl}>Download ZIP instead</a></p>
+      {message && <p role="status" className={styles.downloadStatus}>{message}</p>}
+      <details className={styles.checksum}><summary>Release details and SHA-256</summary><p>Morrow {release.version} · {Math.round(release.bytes / 1_000_000)} MB</p><p>DMG</p><code>{release.sha256}</code><p>ZIP (contains the DMG)</p><code>{release.zipSha256}</code></details>
     </div>
   </>;
 }
