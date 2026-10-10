@@ -23,9 +23,9 @@ describe("billing request recovery", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
   it("returns server data and clears its timeout", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ accounts: [] })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ accounts: [], subscriptions: [], seats: [], payments: [] })));
     const { billingRequest } = await import("../lib/billing");
-    await expect(billingRequest("billing-customer", { action: "snapshot" })).resolves.toEqual({ accounts: [] });
+    await expect(billingRequest("billing-customer", { action: "snapshot" })).resolves.toEqual({ accounts: [], subscriptions: [], seats: [], payments: [], betaInviteRequired: false, trial: { enabled: false, days: 7 } });
     expect(vi.getTimerCount()).toBe(0);
   });
 });

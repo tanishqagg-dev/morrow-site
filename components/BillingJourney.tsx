@@ -10,7 +10,7 @@ type Props = {
   stage: SubscriptionStage; email: string | null; desktopRequest: boolean; desktopConnected: boolean;
   busy: boolean; error: string; notice: string; signInAvailable: boolean; canConnect: boolean;
   onSignIn: () => void; onSignOut: () => void; onRefresh: () => void; onAccount: () => void;
-  accountControl?: ReactNode;
+  accountControl?: ReactNode; authContent?: ReactNode; authTitle?: string;
   onBack: () => void; onConnect: () => void; children?: ReactNode;
 };
 
@@ -43,29 +43,30 @@ export function BillingJourney(props: Props) {
       </section>}
       {stage === "sign-in" && <section className={styles.state}>
         <img className={styles.mark} src="/morrow/mark-small.png" alt="" width="72" height="72" />
-        <h1>Welcome to Morrow.</h1>
-        <p>Sign in or create an account. {siteConfig.betaMode ? "Then enter your beta invite code." : "Then choose your plan."}</p>
-        <button className={styles.primary} onClick={props.onSignIn} disabled={busy || !props.signInAvailable}>Sign in or create account <ArrowRight /></button>
-        {!props.signInAvailable && <p role="status">Sign-in is unavailable right now. Please try again later.</p>}
-        <p className={styles.finePrint}>{siteConfig.betaMode ? "Already in the beta? Use the same account to pick up where you left off." : "Already subscribed? Use the same account to pick up where you left off."}</p>
+        <h1>{props.authTitle || "Create your Morrow account."}</h1>
+        <p>Your account connects your Mac and subscription.</p>
+        {props.authContent || <><button className={styles.primary} onClick={props.onSignIn} disabled={busy || !props.signInAvailable}>Sign in or create account <ArrowRight /></button>
+        {!props.signInAvailable && <p role="status">Sign-in is unavailable right now. Please try again later.</p>}</>}
+        <p className={styles.finePrint}>Already subscribed? Use the same account to pick up where you left off.</p>
       </section>}
       {stage === "confirming" && <section className={styles.state} aria-live="polite">
-        <SpinnerGap className={styles.spin} size={32} /><h1>Confirming your payment.</h1>
-        <p>We’re waiting for payment confirmation. {desktopRequest ? "Morrow will continue on your Mac once access is ready." : "Your subscription will appear here once access is ready."}</p>
+        <SpinnerGap className={styles.spin} size={32} /><h1>Confirming with your bank.</h1>
+        <p>We are checking your bank authorization. {desktopRequest ? "Morrow will continue on your Mac once access is ready." : "Your subscription will appear here once access is ready."}</p>
         <p className={styles.finePrint}>Please don’t pay again. It’s safe to check back here.</p>
         <button className={styles.secondary} onClick={props.onRefresh} disabled={busy}>{busy ? "Checking…" : "Check payment status"}</button>
         <a className={styles.supportNote} href={`${help}?subject=Morrow%20payment%20confirmation`}>Get help with this payment</a>
       </section>}
       {stage === "ready" && <section className={styles.state}>
         <CheckCircle size={52} className={styles.success} weight="fill" />
-        <h1>{desktopConnected ? "You’re in." : "Your Morrow is ready."}</h1>
-        <p>{desktopConnected ? "Morrow is continuing on your Mac. You can close this page." : desktopRequest ? "Continue to the Mac where you started sign-in." : "Open Morrow on your Mac and sign in with this account. Your subscription is ready."}</p>
+        <h1>{desktopRequest ? "You're in. Morrow is unlocking now." : "Your Morrow is ready."}</h1>
+        <p>{desktopConnected ? "Morrow is continuing on your Mac. You can close this tab." : desktopRequest ? "Continue to the Mac where you started sign-in." : "Open Morrow on your Mac and sign in with this account. Your subscription is ready."}</p>
         {desktopRequest && !desktopConnected && props.canConnect && <><button className={styles.primary} onClick={props.onConnect} disabled={busy}>{busy ? <><SpinnerGap className={styles.spin} /> Connecting…</> : <>Open Morrow <ArrowRight /></>}</button><p className={styles.finePrint}>Only continue if you started this sign-in on your own Mac.</p></>}
         {desktopRequest && !desktopConnected && !props.canConnect && <><p className={styles.finePrint}>Your access is active, but this email does not have an available seat. Check your account or contact support.</p><button className={styles.secondary} onClick={props.onRefresh} disabled={busy}>Check access again</button></>}
+        {desktopRequest && desktopConnected && <a className={styles.primary} href="morrow://auth-complete">Open Morrow <ArrowRight /></a>}
         <button className={styles.textButton} onClick={props.onAccount}>Manage subscription</button>
       </section>}
       {props.children}
     </main>
-    <footer className={styles.footer}><span>Made by Aestrum</span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href={help}>Help</a></footer>
+    <footer className={styles.footer}><span>Morrow</span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href={help}>Help</a></footer>
   </div>;
 }

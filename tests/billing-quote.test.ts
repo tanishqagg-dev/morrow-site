@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { billingQuote, firstPaymentQuote } from "../lib/billing";
 describe("tax-inclusive billing quote", () => {
-  it("charges exactly ten rupees including GST", () => {
-    expect(billingQuote(847, 1, 1000)).toEqual({base:847,gst:153,total:1000});
+  it("charges the catalog total including GST", () => {
+    expect(billingQuote(299900, 1, 353882)).toEqual({base:299900,gst:53982,total:353882});
     expect(billingQuote(847, 2, 1000)).toEqual({base:1694,gst:306,total:2000});
   });
   it("preserves legacy and coupon quotes", () => {

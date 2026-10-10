@@ -75,8 +75,8 @@ describe("subscription screen boundaries",()=>{
     expect(html).not.toContain(">Open Morrow");
     expect(html).toContain("Check access again");
     const connected=renderToStaticMarkup(createElement(BillingJourney,{...props,stage:"ready",desktopRequest:true,canConnect:true,desktopConnected:true}));
-    expect(connected).toContain("You can close this page");
-    expect(connected).not.toContain(">Open Morrow");
+    expect(connected).toContain("You can close this tab");
+    expect(connected).toContain('href="morrow://auth-complete"');
     expect(connected).toContain("Manage subscription");
   });
 });

@@ -7,8 +7,15 @@ export type BillingPlan = {
   minimumQuantity: number; chargeAmountPaise?: number; gstDiscountAvailable?: boolean;
 };
 
+export type BillingTrial = { enabled: boolean; days: number; eligible?: boolean; reason?: null | "used" | "subscribed" | "disabled" };
+const trialSchema = z.object({ enabled: z.boolean(), days: z.number().int().min(1).max(30),
+  eligible: z.boolean().optional(), reason: z.enum(["used", "subscribed", "disabled"]).nullable().optional() });
+const trialOff = { enabled: false, days: 7 };
+
 const billingCatalogSchema = z.object({
   mode: z.enum(["test", "live"]),
+  betaInviteRequired: z.boolean().optional().default(false),
+  trial: trialSchema.optional().catch(undefined),
   plans: z.array(z.object({
     id: z.string().min(1), code: z.string().min(1), name: z.string().min(1),
     audience: z.enum(["personal", "company"]), period: z.enum(["monthly", "yearly"]),
@@ -19,10 +26,10 @@ const billingCatalogSchema = z.object({
   })),
 });
 
-export function parseBillingCatalog(value: unknown): { plans: BillingPlan[]; mode: "test" | "live" } {
+export function parseBillingCatalog(value: unknown): { plans: BillingPlan[]; mode: "test" | "live"; betaInviteRequired: boolean; trial: BillingTrial } {
   const result = billingCatalogSchema.safeParse(value);
   if (!result.success) throw new Error("Morrow's plan service returned an unreadable response. Try again later.");
-  return result.data;
+  return { ...result.data, trial: result.data.trial ?? trialOff };
 }
 
 export function parsePendingPayment(value: unknown): { desktopRequest: string } | null {
@@ -35,10 +42,13 @@ export type BillingAccount = {
   owner_user_id: string; created_at: string;
 };
 
+const subscriptionStatusSchema = z.enum(["creating", "created", "authenticated", "active", "pending", "halted", "paused", "cancelled", "completed", "expired", "trialing", "trial_canceled", "unknown"]).catch("unknown");
+export type BillingSubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
 export type BillingSubscription = {
   id: string; account_id: string; plan_id: string; razorpay_subscription_id: string | null;
-  access_source?: "payment" | "admin_coupon";
-  status: string; quantity: number; scheduled_quantity: number | null;
+  access_source?: "payment" | "admin_coupon" | "trial";
+  trial_ends_at?: string | null;
+  status: BillingSubscriptionStatus; quantity: number; scheduled_quantity: number | null;
   paid_until: string | null; cancel_at_period_end: boolean;
   plan: { name: string; period: string; amount_paise: number; charge_amount_paise?: number };
 };
@@ -55,9 +65,36 @@ export type BillingPayment = {
 
 export type BillingSnapshot = {
   betaInviteRequired?: boolean;
+  trial?: BillingTrial;
   accounts: BillingAccount[]; subscriptions: BillingSubscription[];
   seats: BillingSeat[]; payments: BillingPayment[];
 };
+
+export const checkoutReplySchema = z.object({
+  subscriptionId: z.string().min(1), keyId: z.string().min(1), email: z.string(), name: z.string(),
+  paymentMethod: z.enum(["upi", "card"]).optional(),
+  trialEndsAt: z.iso.datetime({ offset: true }).nullable().optional().default(null),
+  chargeAmountPaise: z.number().int().nonnegative().optional(),
+  amountPaise: z.number().int().nonnegative().optional(),
+});
+export type CheckoutReply = z.infer<typeof checkoutReplySchema>;
+export function parseCheckoutReply(value: unknown): CheckoutReply {
+  const result = checkoutReplySchema.safeParse(value);
+  if (!result.success) throw new Error("Checkout returned unreadable billing details. Check your account before trying again.");
+  return result.data;
+}
+export function parseBillingSnapshot(value: unknown): BillingSnapshot {
+  const result = z.object({ accounts: z.array(z.any()), seats: z.array(z.any()), payments: z.array(z.any()),
+    subscriptions: z.array(z.object({ status: subscriptionStatusSchema, trial_ends_at: z.iso.datetime({ offset: true }).nullable().optional().catch(null),
+      access_source: z.enum(["payment", "admin_coupon", "trial"]).optional() }).passthrough()),
+    betaInviteRequired: z.boolean().optional().default(false), trial: trialSchema.optional().catch(undefined),
+  }).safeParse(value);
+  if (!result.success) throw new Error("Your account returned unreadable billing details. Try refreshing your account.");
+  return { ...result.data, trial: result.data.trial ?? trialOff } as BillingSnapshot;
+}
+export class BillingError extends Error {
+  constructor(message: string, public code?: string) { super(message); }
+}
 
 export function paidSeatForAccount(snapshot: BillingSnapshot, accountId: string, email: string | null, now = Date.now()) {
   const paid = snapshot.subscriptions.some((subscription) => subscription.account_id === accountId
@@ -89,8 +126,9 @@ export async function billingRequest<T>(functionName: string, body?: object, tok
     });
     const result = await response.json().catch(() => null);
     if (controller.signal.aborted) throw new Error("Request timed out.");
-    if (!response.ok) throw new Error(result?.error?.message || "Morrow billing could not complete this request.");
+    if (!response.ok) throw new BillingError(result?.error?.message || "Morrow billing could not complete this request.", result?.error?.code);
     if (result === null || typeof result !== "object") throw new Error("Morrow billing returned an unreadable response. Refresh your subscription to check its status.");
+    if (functionName === "billing-customer" && (body as { action?: string })?.action === "snapshot") return parseBillingSnapshot(result) as T;
     return result as T;
   } catch (error) {
     // Never replay a mutation automatically: the server may have completed it.

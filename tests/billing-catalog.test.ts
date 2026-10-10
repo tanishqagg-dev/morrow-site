@@ -19,8 +19,8 @@ describe('billing catalog response validation', () => {
 
   it('accepts both gateway modes and permits an empty published catalog', () => {
     for (const mode of ['test', 'live']) {
-      expect(parseBillingCatalog({ mode, plans: [plan], gstRate: 18 })).toEqual({ mode, plans: [plan] });
-      expect(parseBillingCatalog({ mode, plans: [] })).toEqual({ mode, plans: [] });
+      expect(parseBillingCatalog({ mode, plans: [plan], gstRate: 18 })).toEqual({ mode, plans: [plan], betaInviteRequired: false, trial: { enabled: false, days: 7 } });
+      expect(parseBillingCatalog({ mode, plans: [] })).toEqual({ mode, plans: [], betaInviteRequired: false, trial: { enabled: false, days: 7 } });
     }
   });
 });
