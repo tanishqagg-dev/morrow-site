@@ -5,11 +5,11 @@ import { useEffect, useRef } from "react";
 export type AestrumMode = "ready" | "listening" | "working" | "speaking" | "complete";
 
 const labels: Record<AestrumMode, string> = {
-  ready: "Aestrum is ready",
-  listening: "Aestrum is listening",
-  working: "Aestrum is working",
-  speaking: "Aestrum is speaking",
-  complete: "Aestrum completed the request",
+  ready: "Morrow is ready",
+  listening: "Morrow is listening",
+  working: "Morrow is working",
+  speaking: "Morrow is speaking",
+  complete: "Morrow completed the request",
 };
 
 export function AestrumCharacter({

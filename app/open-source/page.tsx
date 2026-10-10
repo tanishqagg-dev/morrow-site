@@ -6,7 +6,7 @@ import { siteConfig } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Open source notice",
-  description: "Open source and source-availability notice for Aestrum.",
+  description: "Open source and source-availability notice for Morrow.",
 };
 
 export default function OpenSourcePage() {
@@ -16,7 +16,7 @@ export default function OpenSourcePage() {
       <main id="main-content" className="subpage-main privacy-page">
         <header>
           <h1>Open source notice.</h1>
-          <p>Aestrum is built on open source software, including the original Jarvis Codex project licensed under GNU GPL v3.</p>
+          <p>Morrow is built on open source software, including the original Jarvis Codex project licensed under GNU GPL v3.</p>
         </header>
         <div className="privacy-content">
           <section>
@@ -30,18 +30,18 @@ export default function OpenSourcePage() {
           </section>
           <section>
             <h2>Corresponding source</h2>
-            <p>Pilot recipients receive the applicable source and license notices with their distribution. If your copy did not include them, contact Skills4U and quote the version shown in Aestrum Settings.</p>
+            <p>Pilot recipients receive the applicable source and license notices with their distribution. If your copy did not include them, contact Morrow support and quote the version shown in Morrow Settings.</p>
           </section>
           <section>
             <h2>Commercial services</h2>
-            <p>Skills4U activation, onboarding, support, release signing, and hosted services are separate from OpenAI. ChatGPT and Codex are trademarks of OpenAI.</p>
+            <p>Morrow account access, onboarding, support, release signing, and hosted services are separate from OpenAI. ChatGPT and Codex are trademarks of OpenAI.</p>
           </section>
           <section>
             <h2>Request help</h2>
             <div>
-              <p>Use the Skills4U company page for pilot support or a source request.</p>
+              <p>Contact Morrow support for setup help or a source request.</p>
               <a className="text-link" href={siteConfig.supportUrl} target="_blank" rel="noreferrer">
-                Contact Skills4U <ArrowSquareOut aria-hidden="true" />
+                Contact Morrow support <ArrowSquareOut aria-hidden="true" />
               </a>
             </div>
           </section>

@@ -40,7 +40,7 @@ export default function TermsPage() {
           </section>
           <section>
             <h2>Price</h2>
-            <p>The personal monthly plan costs ₹2,999 per month plus 18% GST (₹3,538.82 total) for new subscriptions. Existing ₹10 subscriptions keep their agreed price. Checkout shows the full amount and billing period before you pay. Your separate ChatGPT subscription is not included. Razorpay processes payments and recurring mandates. Your Morrow subscription renews until cancelled; we tell you before a price change applies.</p>
+            <p>The current plan and applicable GST are shown before you authorize checkout. Existing subscriptions keep their agreed price. Checkout shows the full amount and billing period before you pay. Your separate ChatGPT subscription is not included. Razorpay processes payments and recurring mandates. Your Morrow subscription renews until cancelled; we tell you before a price change applies.</p>
           </section>
           <section>
             <h2>Delivery and cancellation</h2>

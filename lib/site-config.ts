@@ -1,5 +1,5 @@
 export const siteConfig = {
-  productName: "Aestrum",
+  productName: "Morrow",
   version: process.env.NEXT_PUBLIC_JARVIS_VERSION || "Pilot 0.3",
   supportUrl:
     process.env.NEXT_PUBLIC_SUPPORT_URL ||

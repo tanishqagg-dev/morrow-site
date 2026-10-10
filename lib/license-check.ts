@@ -124,10 +124,10 @@ export function activationServiceErrorMessage(status: number, value: unknown) {
     return "Too many checks were made. Wait a minute, then try again.";
   }
   if (status >= 500) {
-    return "Aestrum activation is temporarily unavailable. Please try again in a moment.";
+    return "Morrow activation is temporarily unavailable. Please try again in a moment.";
   }
   if (status === 401 || status === 403) {
-    return "Aestrum activation could not verify this request. Please try again or contact Skills4U.";
+    return "Morrow activation could not verify this request. Please try again or contact Morrow support.";
   }
   return edgeErrorMessage(value) || "This activation code could not be checked. Please try again.";
 }

@@ -7,7 +7,7 @@ import { siteConfig } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Windows setup",
-  description: "Plain-language setup help for the private Aestrum Windows pilot.",
+  description: "Plain-language setup help for the private Morrow Windows pilot.",
 };
 
 export default function WindowsSetupPage() {
@@ -16,7 +16,7 @@ export default function WindowsSetupPage() {
       <SiteHeader />
       <main id="main-content" className="subpage-main privacy-page windows-setup-page">
         <header>
-          <h1>Install Aestrum on a Windows work laptop.</h1>
+          <h1>Install Morrow on a Windows work laptop.</h1>
           <p>Start with your Morrow account. The right installation route depends on whether your company manages the computer.</p>
         </header>
 
@@ -24,7 +24,7 @@ export default function WindowsSetupPage() {
           <CheckCircle aria-hidden="true" weight="duotone" />
           <div>
             <h2 id="pilot-note-title">Private pilot note</h2>
-            <p>Until trusted Windows signing is complete, the assisted pilot is handed over privately by Skills4U with a SHA-256 that must match the separate authenticated build record.</p>
+            <p>Until trusted Windows signing is complete, the assisted pilot is handed over privately by Morrow support with a SHA-256 that must match the separate authenticated build record.</p>
           </div>
         </aside>
 
@@ -40,9 +40,9 @@ export default function WindowsSetupPage() {
           <section>
             <h2><Laptop aria-hidden="true" weight="duotone" />Personal or unmanaged laptop</h2>
             <div>
-              <p>A subscription does not make an unsigned installer trusted. Install only the private package supplied by Skills4U after its SHA-256 matches the separate authenticated build record.</p>
-              <p>If Windows blocks the app without its normal continue option, stop and contact Skills4U.</p>
-              <p>Never turn off Smart App Control just to install Aestrum.</p>
+              <p>A subscription does not make an unsigned installer trusted. Install only the private package supplied by Morrow support after its SHA-256 matches the separate authenticated build record.</p>
+              <p>If Windows blocks the app without its normal continue option, stop and contact Morrow support.</p>
+              <p>Never turn off Smart App Control just to install Morrow.</p>
             </div>
           </section>
 
@@ -52,7 +52,7 @@ export default function WindowsSetupPage() {
               <li>Open Morrow and sign in with the account you subscribed with.</li>
               <li>Complete the official ChatGPT browser sign-in.</li>
               <li>Allow microphone access when Windows asks.</li>
-              <li>Speak your first request. Aestrum never asks for an OpenAI API key.</li>
+              <li>Speak your first request. Morrow never asks for an OpenAI API key.</li>
             </ol>
           </section>
         </div>
@@ -63,7 +63,7 @@ export default function WindowsSetupPage() {
             <ArrowRight aria-hidden="true" weight="bold" />
           </Link>
           <a className="button button-secondary" href={siteConfig.supportUrl} target="_blank" rel="noreferrer">
-            Contact Skills4U
+            Contact Morrow support
           </a>
         </div>
       </main>

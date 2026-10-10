@@ -18,7 +18,7 @@ const status: Record<DemoStep, { mode: AestrumMode; title: string; detail: strin
   ready: { mode: "ready", title: "Ready when you are", detail: "Try the board brief below." },
   listening: { mode: "listening", title: "Listening", detail: "Prepare my board brief and open the PDF." },
   working: { mode: "working", title: "Working", detail: "Finding the latest numbers and shaping the brief." },
-  artifact: { mode: "complete", title: "Board brief ready", detail: "Opened inside Aestrum, ready to present." },
+  artifact: { mode: "complete", title: "Board brief ready", detail: "Opened inside Morrow, ready to present." },
 };
 
 export function VoiceDemo() {
@@ -44,7 +44,7 @@ export function VoiceDemo() {
 
   return (
     <div className={`product-demo ${artifactOpen ? "artifact-is-open" : ""}`}>
-      <div className="demo-sidebar" aria-label="Aestrum preview navigation">
+      <div className="demo-sidebar" aria-label="Morrow preview navigation">
         <div className="demo-brand">
           <AestrumMark />
           <strong>aestrum</strong>

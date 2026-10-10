@@ -99,18 +99,21 @@ p {
 .skip-link {
   position: fixed;
   left: 16px;
-  top: 12px;
+  top: -100px;
+  clip-path: inset(50%);
   z-index: 100;
   padding: 10px 15px;
   border-radius: 10px;
   background: var(--ink);
   color: var(--surface-raised);
-  transform: translateY(-150%);
-  transition: transform 160ms ease;
+  transform: none;
+  transition: top 160ms ease;
 }
 
 .skip-link:focus {
-  transform: translateY(0);
+  top: 12px;
+  clip-path: none;
+  transform: none;
 }
 
 :focus-visible {
