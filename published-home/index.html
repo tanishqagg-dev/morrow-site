@@ -23,7 +23,7 @@
 </script>
 <style>
 /*
-Read: product page for Indian founders, students and solo operators on a Mac. The visitor should join the beta, or download if invited.
+Read: product page for Indian founders, students and solo operators on a Mac. The visitor should download Morrow for Mac.
 Experience model: cinematic scroll story built around a product demo.
 Signature: "Say it". One spoken sentence turns six rupee receipts into a GST sheet and flags the missing GSTIN, scrubbed by scroll.
 Accent: #FFE34B on the hero and footer floods, the mascot, primary actions and live states.
@@ -292,6 +292,9 @@ section[id]{scroll-margin-top:80px}
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
+<meta name="morrow-billing-base" content="__MORROW_BILLING_BASE__">
+<meta name="morrow-billing-key" content="__MORROW_BILLING_KEY__">
+<script src="/catalog.js" defer></script>
 </head>
 <body>
 <header class="nav" id="nav">
@@ -302,7 +305,7 @@ section[id]{scroll-margin-top:80px}
         <li><a href="#say-it">How it works</a></li>
         <li><a href="#film">Watch</a></li>
         <li><a href="#pricing">Pricing</a></li>
-        <li><a class="btn" href="#beta"><span class="roll"><span>Join the beta ↗</span><span aria-hidden="true">Join the beta ↗</span></span></a></li>
+        <li><a class="btn" href="/download?start=1"><span class="roll"><span>Download for Mac</span><span aria-hidden="true">Download for Mac</span></span></a></li>
       </ul>
     </nav>
   </div>
@@ -321,13 +324,13 @@ section[id]{scroll-margin-top:80px}
         <div class="hero-side" data-hide>
           <p>Morrow is a voice workspace for your Mac. Tell it what you need, and it works through your files and shows you the result.</p>
           <div class="hero-actions">
-            <a class="btn" href="#beta"><span class="roll"><span>Request beta access ↗</span><span aria-hidden="true">Request beta access ↗</span></span></a>
-            <a class="link" href="/download">Download for Mac</a>
+            <a class="btn" href="/download?start=1"><span class="roll"><span>Download for Mac</span><span aria-hidden="true">Download for Mac</span></span></a>
+            <a class="link" href="#beta">Book a demo</a>
           </div>
         </div>
       </div>
       <div class="hero-meta" data-hide>
-        <span>Private paid beta · Apple silicon Mac · Invitation required</span>
+        <span><span data-trial-message>Apple silicon. Download first, choose your plan in Morrow.</span></span>
         <span><span class="deva" lang="hi">भारत में बना</span> · Made in Bharat, in New Delhi</span>
       </div>
     </div>
@@ -471,7 +474,7 @@ section[id]{scroll-margin-top:80px}
         <a class="help" href="/download#help-permissions"><b>Mac permissions</b><span>Mic, Accessibility, Screen Recording</span></a>
         <a class="help" href="/download#help-keychain"><b>Keychain keeps asking</b><span>Always Allow, and what not to reset</span></a>
         <a class="help" href="/download#help-paid"><b>Paid, still locked</b><span>Don't pay again. Check status.</span></a>
-        <a class="help" href="/download#help-chatgpt"><b>Invite, ChatGPT, cooldown</b><span>Codes, sign-in, waiting it out</span></a>
+        <a class="help" href="/download#help-chatgpt"><b>ChatGPT sign-in, cooldown</b><span>Sign-in, waiting it out</span></a>
       </div>
     </div>
   </section>
@@ -493,7 +496,7 @@ section[id]{scroll-margin-top:80px}
       <ol class="how">
         <li><strong>Runs on your Mac.</strong><span>Conversations, transcripts and the files Morrow makes stay on your Mac. Your ChatGPT sign-in stays on your device.</span></li>
         <li><strong>You choose what it can touch.</strong><span>Pick one work folder. Morrow changes files only inside it unless you switch on Full access. macOS asks you before Morrow can use the microphone, the screen or other apps.</span></li>
-        <li><strong>AI runs on your own ChatGPT plan.</strong><span>Your request and the context it needs go to OpenAI through Codex, under your account's data controls. Aestrum does not automatically receive your conversations or files. A support report you choose to send can include private work in its screenshot or description.</span></li>
+        <li><strong>AI runs on your own ChatGPT plan.</strong><span>Your request and the context it needs go to OpenAI through Codex, under your account's data controls. Morrow does not automatically receive your conversations or files. A support report you choose to send can include private work in its screenshot or description.</span></li>
       </ol>
       <p style="margin-top:34px"><a class="link" href="/privacy">Read the privacy policy ↗</a></p>
     </div>
@@ -522,21 +525,20 @@ section[id]{scroll-margin-top:80px}
   <section class="pricing" id="pricing" aria-labelledby="purchase-heading">
     <div class="wrap pricing-grid">
       <div>
-        <p class="label">Morrow beta</p>
+        <p class="label">Morrow Personal</p>
         <h2 class="h2" id="purchase-heading" data-split>Your Mac.<br>More capable.</h2>
-        <p class="price num">₹2,999<small>/month + GST</small></p>
-        <p>₹<span class="num" data-count="3538.82">3,538.82</span>/month including 18% GST. Cancel renewal anytime.</p>
+        <p class="price num"><span data-plan-price>See current plan</span><small>/month + GST</small></p>
+        <p data-plan-total>Review the current price and taxes before you subscribe.</p><p data-trial-message></p>
       </div>
       <div>
         <ul>
           <li><b>Voice workspace on your Mac,</b> Morrow Island, and your files in one place.</li>
           <li><b>Full refund</b> within 7 days of your first payment.</li>
           <li><b>AI usage runs on your own ChatGPT plan.</b></li>
-          <li><b>Enter your invitation inside the app.</b> Payment follows, through Razorpay.</li>
+          <li><b>Create your account in your browser.</b> Morrow unlocks after your bank confirms access.</li>
         </ul>
         <div class="price-actions">
-          <a class="btn is-yellow" href="#beta"><span class="roll"><span>Join the beta ↗</span><span aria-hidden="true">Join the beta ↗</span></span></a>
-          <a class="btn" href="/download"><span class="roll"><span>Download for Mac ↗</span><span aria-hidden="true">Download for Mac ↗</span></span></a>
+          <a class="btn" href="/download?start=1"><span class="roll"><span>Download for Mac</span><span aria-hidden="true">Download for Mac</span></span></a>
           <a class="link" href="/subscribe">Manage your account ↗</a>
         </div>
       </div>
@@ -548,12 +550,12 @@ section[id]{scroll-margin-top:80px}
 <section class="footer" id="beta" aria-labelledby="beta-title">
   <span id="demo" class="anchor-alias"></span>
   <div class="wrap">
-    <h2 class="h2" id="beta-title" data-split>Join the beta.<br>Or meet Morrow.</h2>
-    <p>Request an invitation to the paid beta, or ask for a personal demo. ₹2,999/month + GST after you subscribe.</p>
+    <h2 class="h2" id="beta-title" data-split>Meet Morrow.<br>Bring your busywork.</h2>
+    <p>Ask for a personal demo or get product updates. Download Morrow whenever you are ready.</p>
     <form class="form" name="morrow-beta" method="POST" action="/thanks" data-netlify="true" netlify-honeypot="bot-field">
       <input type="hidden" name="form-name" value="morrow-beta">
       <p class="bot-field"><label>Leave this empty<input name="bot-field" tabindex="-1" autocomplete="off"></label></p>
-      <fieldset class="wide request-type"><legend>I want to</legend><label><input type="radio" name="request" value="Join the beta" checked> Join the beta</label><label><input type="radio" name="request" value="Book a demo"> Book a personal demo</label></fieldset>
+      <fieldset class="wide request-type"><legend>I want to</legend><label><input type="radio" name="request" value="Join the beta" checked> Product updates</label><label><input type="radio" name="request" value="Book a demo"> Book a personal demo</label></fieldset>
       <label>Name<input name="name" autocomplete="name" placeholder="Your name" required maxlength="120"></label>
       <label>Email<input name="email" type="email" autocomplete="email" placeholder="you@example.com" required maxlength="200"></label>
       <label class="wide">What would you like Morrow to help with? <span class="optional">(optional)</span><textarea name="workflow" placeholder="A task you do every week" rows="3" maxlength="2000"></textarea></label>
@@ -561,7 +563,7 @@ section[id]{scroll-margin-top:80px}
       <p class="notice wide">We use this only to contact you about Morrow. Don't include passwords or private documents. <a href="/privacy">Privacy policy</a></p>
     </form>
     <div class="bottom"><img src="wordmark-sm.png" alt="morrow" width="360" height="120"><span>Runs on your Mac. Your ChatGPT sign-in stays on your device.</span></div>
-    <nav class="legal" aria-label="Company and legal"><span>Aestrum · VARUNSHRI MEDIA SOLUTIONS · India</span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href="/contact">Contact</a><a href="mailto:support@aestrum.in">support@aestrum.in</a><span>Not affiliated with or endorsed by OpenAI.</span></nav>
+    <nav class="legal" aria-label="Company and legal"><span>Morrow · VARUNSHRI MEDIA SOLUTIONS · India</span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href="/contact">Contact</a><a href="mailto:support@aestrum.in">support@aestrum.in</a><span>Not affiliated with or endorsed by OpenAI.</span></nav>
   </div>
 </section>
 <button class="motion-toggle" id="motion-toggle" aria-pressed="false">Pause motion</button>

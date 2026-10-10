@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import { MacDownload } from '@/components/MacDownload';
 import styles from './download.module.css';
 
-export const metadata: Metadata = { title: 'Download Morrow for Mac', description: 'Install the Morrow private beta on your Mac, then enter your invitation and subscribe. Setup video and fixes for common problems.' };
+export const metadata: Metadata = { title: 'Download Morrow for Mac', description: 'Install Morrow on your Mac, then create your account and review your plan. Setup video and fixes for common problems.' };
 
 // Videos live in published-home/media and are copied to the site root at build time.
 const fixes = [
   { id: 'help-permissions', title: 'Morrow can\'t hear you, or can\'t click and type', video: 'fix-permissions', steps: ['Open System Settings, then Privacy & Security.', 'Under Microphone, turn on Morrow.', 'Under Accessibility, turn on Morrow, and Morrow Island for the shortcut.', 'Under Screen & System Audio Recording, turn on Morrow Island. If macOS asks, choose Quit & Reopen.', 'For computer control, keep the official ChatGPT or Codex desktop app installed and running.', 'In Morrow, open Settings > Permissions and choose Check connection.', 'If it says Service connection permission needed, choose Allow service connection and select the IPC folder shown by macOS. Then check again.'] },
   { id: 'help-keychain', title: 'Morrow keeps asking for your Keychain password', video: 'fix-keychain', steps: ['Type your Mac login password and click Always Allow.', 'If it keeps coming back, don\'t reset your Keychain. Quit any extra copies of Morrow and open the one in Applications.', 'If you see macOS status -34018, this build is missing a signing permission. Contact support for a replacement build.', 'Never send your password to support.'] },
   { id: 'help-paid', title: 'You paid, but Morrow on your Mac is still locked', video: 'fix-paid-locked', steps: ['Don\'t pay again. On the payment page, press Check payment status.', 'If the sign-in expired, press Continue to subscription and sign in with the same account.', 'Already paid? Choose Already paid? Sign in.', 'If it says your account is connected to another computer, contact Morrow support to reset the device.'] },
-  { id: 'help-chatgpt', title: 'Invite code, ChatGPT sign-in or cooldown', video: 'fix-chatgpt', steps: ['Invitation code not accepted? Check it letter by letter, then try again.', 'ChatGPT sign-in timed out? Press Try again and finish signing in in your browser.', 'Seeing ChatGPT cooldown? ChatGPT has paused requests for a few minutes. Your Morrow subscription is fine.', 'When the countdown ends, send your request again. Morrow doesn\'t resend it for you.'] },
+  { id: 'help-chatgpt', title: 'ChatGPT sign-in or cooldown', video: 'fix-chatgpt', steps: ['ChatGPT sign-in timed out? Press Try again and finish signing in in your browser.', 'Seeing ChatGPT cooldown? ChatGPT has paused requests for a few minutes. Your Morrow subscription is fine.', 'When the countdown ends, send your request again. Morrow doesn\'t resend it for you.'] },
 ];
 
 export default function DownloadPage() {
@@ -21,21 +21,11 @@ export default function DownloadPage() {
             <a href="/" aria-label="Morrow home"><img src="/wordmark-sm.png" width={360} height={120} alt="Morrow" /></a>
             <a href="/subscribe?view=subscription">Manage your account ↗</a>
           </div>
-          <div className={styles.hero}>
-            <div>
-              <p className={styles.meta}>Private paid beta · Apple silicon Mac · macOS 13 or later</p>
-              <h1 className={styles.title}>Start on your Mac.</h1>
-            </div>
-            <div className={styles.side}>
-              <p>Download first. Your invitation and subscription are handled inside Morrow.</p>
-              <MacDownload />
-            </div>
-          </div>
-          <ol className={styles.steps}>
-            <li>Open the DMG and drag Morrow to Applications.</li>
-            <li>Open Morrow and enter the invitation code you received.</li>
-            <li>Sign in and pay ₹2,999/month + 18% GST through Razorpay.</li>
-            <li>Morrow continues automatically. Connect your ChatGPT account and follow the Mac walkthrough.</li>
+          <div className={styles.hero}><MacDownload /></div>
+          <ol className={styles.steps} aria-label="Install Morrow">
+            <li><div className={styles.installVisual} aria-hidden="true"><div className={styles.finderBar}><i /><i /><i /><span>Downloads</span></div><div className={styles.disk}><span>↓</span></div><strong>Morrow.dmg</strong><span className={styles.pointer}>↖</span></div><h2>Open Morrow.dmg</h2><p>Find it in your Downloads folder.</p></li>
+            <li><div className={styles.installVisual} aria-hidden="true"><div className={styles.finderBar}><i /><i /><i /><span>Morrow</span></div><div className={styles.dragScene}><img src="/morrow/mark-small.png" alt="" width="58" height="58" /><span className={styles.dragArrow}>→</span><div className={styles.folder}>A</div></div><div className={styles.fileLabels}><span>Morrow</span><span>Applications</span></div></div><h2>Drag into Applications</h2><p>Keep one copy of Morrow on your Mac.</p></li>
+            <li><div className={`${styles.installVisual} ${styles.welcomeVisual}`} aria-hidden="true"><div className={styles.finderBar}><i /><i /><i /><span>Morrow</span></div><img src="/morrow/mark-small.png" alt="" width="52" height="52" /><strong>Welcome to Morrow</strong><span className={styles.miniButton}>Start free trial</span></div><h2>Open Morrow</h2><p>Press &quot;Start free trial&quot; when trials are available. Your browser handles your account and plan.</p></li>
           </ol>
           <p className={styles.note}>Computer control needs the official ChatGPT or Codex desktop app installed and running. In Morrow, use Settings &gt; Permissions to check the connection and allow the requested macOS access.</p>
         </div>
@@ -58,7 +48,7 @@ export default function DownloadPage() {
         <div className={styles.wrap}>
           <div className={styles.helpHead}>
             <h2 className={styles.h2} id="help-title">Stuck? Start here.</h2>
-            <p>The four problems beta users hit most, each with a short video and the exact steps.</p>
+            <p>Common setup problems, each with a short video and the exact steps.</p>
           </div>
           {fixes.map((f) => (
             <article className={styles.fix} id={f.id} key={f.id}>

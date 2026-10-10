@@ -1,3 +1,4 @@
+import nextEnv from "@next/env";
 import { lstat, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,6 +80,7 @@ export function renderNetlifyHeaders(environment = process.env) {
 
 async function main() {
   const websiteDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  nextEnv.loadEnvConfig(websiteDirectory);
   const outputDirectory = resolve(websiteDirectory, "out");
   const headersPath = resolve(outputDirectory, "_headers");
   if (dirname(outputDirectory) !== websiteDirectory || dirname(headersPath) !== outputDirectory) {

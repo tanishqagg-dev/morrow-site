@@ -12,17 +12,17 @@ async function sourceFiles(directory: URL): Promise<URL[]> {
 }
 
 describe("customer download gating", () => {
-  it("routes every public download CTA through activation with no permanent URL bypass", async () => {
-    const [button, config, environment, activation] = await Promise.all([
+  it("routes public CTAs to the install guide without requiring an account", async () => {
+    const [button, home, download] = await Promise.all([
       readFile(new URL("../components/DownloadButton.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../lib/site-config.ts", import.meta.url), "utf8"),
-      readFile(new URL("../.env.example", import.meta.url), "utf8"),
-      readFile(new URL("../components/ActivationForm.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../published-home/index.html", import.meta.url), "utf8"),
+      readFile(new URL("../components/MacDownload.tsx", import.meta.url), "utf8"),
     ]);
-    expect(button).toContain('href="/activate"');
-    expect(`${button}\n${config}\n${environment}\n${activation}`).not.toContain("NEXT_PUBLIC_JARVIS_DOWNLOAD_URL");
-    expect(activation).toContain("result?.downloadUrl");
-    expect(activation).not.toContain("fallbackDownloadUrl");
+    expect(button).toContain('href="/download?start=1"');
+    expect(home).toContain('href="/download?start=1"');
+    expect(download).toContain("release.downloadUrl");
+    expect(download).toContain("morrow:download-started");
+    expect(download).not.toContain("getToken");
   });
 
   it("contains no direct public desktop installer link or public installer environment bypass", async () => {

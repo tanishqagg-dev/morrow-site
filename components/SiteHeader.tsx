@@ -1,12 +1,10 @@
 import Link from "next/link";
 
 type SiteHeaderProps = {
-  activePage?: "activate";
+  activePage?: "activate" | "subscribe";
 };
 
 export function SiteHeader({ activePage }: SiteHeaderProps) {
-  const activationActive = activePage === "activate";
-
   return (
     <header className="site-header">
       <div className="site-header-inner">
@@ -14,17 +12,13 @@ export function SiteHeader({ activePage }: SiteHeaderProps) {
           <img src="/morrow/wordmark.png" alt="morrow" width="138" height="46" style={{objectFit: "contain"}} />
         </a>
         <nav className="main-nav" aria-label="Primary navigation">
-          <a href="/#features">Experience</a>
+          <a href="/#say-it">Experience</a>
           <a href="/#pricing">Pricing</a>
-          <a href="/#how-it-works">How it works</a>
+          <a href="/#film">How it works</a>
           <Link href="/privacy">Privacy</Link>
-          <Link href="/activate" aria-current={activationActive ? "page" : undefined}>Your account</Link>
+          <Link href="/subscribe" aria-current={activePage === "subscribe" ? "page" : undefined}>Your account</Link>
         </nav>
-        {activationActive ? (
-          <a className="button button-quiet" href="/#beta">Join the beta</a>
-        ) : (
-          <a className="button button-quiet" href="/#beta">Join the beta</a>
-        )}
+        <a className="button button-quiet" href="/download?start=1">Download for Mac</a>
       </div>
     </header>
   );

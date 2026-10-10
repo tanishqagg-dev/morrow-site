@@ -9,12 +9,12 @@ describe("Morrow private beta", () => {
     expect(home).toContain('href="/subscribe"');
     expect(home).not.toContain("Get Morrow");
     expect(home).not.toContain("Free during the beta");
-    expect(home).toContain("₹2,999");
-    expect(home).toContain("3,538.82</span>/month including 18% GST");
+    expect(home).toContain("data-plan-price");
+    expect(home).toContain("data-plan-total");
     expect(home).toContain("Your ChatGPT sign-in stays on your device.");
     expect(home).not.toContain("Uses your ChatGPT account");
     expect(home).not.toContain("—");
-    expect(header).not.toContain('href="/subscribe"');
+    expect(header).toContain('href="/subscribe"');
   });
 
   it("does not claim secret redaction the app does not do", async () => {
