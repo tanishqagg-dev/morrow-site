@@ -174,6 +174,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [paymentPending, setPaymentPending] = useState(false);
   const [paymentDesktopRequest, setPaymentDesktopRequest] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelRetryId, setCancelRetryId] = useState<string | null>(null);
   const connectionLock = useRef(false);
   const pendingKey = `morrow:payment-pending:${identity?.userId}:${selectedAccountId}`;
   const rememberPendingPayment = (pending: boolean) => {
@@ -560,8 +561,17 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const changeSubscription = (action: "cancel" | "change_quantity", subscription: BillingSubscription, nextQuantity?: number) =>
     void run(action, async () => {
       if (!signedIn) throw new Error("Sign in first.");
-      await billingRequest("billing-customer", { action, subscriptionId: subscription.id,
-        ...(nextQuantity ? { quantity: nextQuantity } : {}) }, await authToken());
+      if (action === "cancel") setCancelRetryId(null);
+      try {
+        await billingRequest("billing-customer", { action, subscriptionId: subscription.id,
+          ...(nextQuantity ? { quantity: nextQuantity } : {}) }, await authToken());
+      } catch (caught) {
+        if (action === "cancel" && caught instanceof BillingError && caught.code === "CANCELLATION_VERIFICATION_FAILED") {
+          setCancelRetryId(subscription.id);
+          throw new Error("We couldn't confirm the cancellation with Razorpay. Nothing changed. Try again in a minute.");
+        }
+        throw caught;
+      }
       await refresh();
       setConfirmCancel(false);
       setNotice(action === "cancel" ? (subscription.status === "trialing" ? "Trial canceled. You will not be charged. Access stays active until your trial ends." : "Renewal cancelled. Access stays active through the paid term.") : "Seat change scheduled for the next billing cycle.");
@@ -684,11 +694,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           {currentSubscription.cancel_at_period_end && <p className={styles.notice}>{currentSubscription.access_source === "admin_coupon" ? "This access does not renew." : "Renewal is cancelled. You can keep using Morrow until this date."}</p>}
           {currentSubscription.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && currentSubscription.status !== "trial_canceled" && <>
             {!confirmCancel ? <button className={styles.textButton} onClick={() => setConfirmCancel(true)}>{currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel subscription"}</button> : <div className={styles.cancelConfirmation}>
-              <h3>{currentSubscription.status === "trialing" ? "Cancel your trial?" : "Cancel renewal?"}</h3><p>You can keep using Morrow until {day(currentSubscription.paid_until)}. {currentSubscription.status === "trialing" ? "Your first charge will be canceled." : "There will be no further renewals."}</p>
-              <div className={styles.inputRow}><button onClick={() => setConfirmCancel(false)} disabled={Boolean(busy)}>Keep subscription</button><button onClick={() => changeSubscription("cancel", currentSubscription)} disabled={Boolean(busy)}>{busy === "cancel" ? "Cancelling…" : currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel renewal"}</button></div>
+              <h3>{currentSubscription.status === "trialing" ? "Cancel your trial?" : "Cancel renewal?"}</h3><p>You can keep using Morrow until {day(currentSubscription.paid_until)}. {currentSubscription.status === "trialing" ? "If confirmed, your first charge will be canceled." : "If confirmed, there will be no further renewals."}</p>
+              <div className={styles.inputRow}><button onClick={() => { setConfirmCancel(false); setCancelRetryId(null); setError(""); }} disabled={Boolean(busy)}>Keep subscription</button><button onClick={() => changeSubscription("cancel", currentSubscription)} disabled={Boolean(busy)}>{busy === "cancel" ? "Cancelling…" : cancelRetryId === currentSubscription.id ? "Retry cancellation" : currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel renewal"}</button></div>
             </div>}
           </>}
-        </> : <>{currentSubscription?.paid_until && <p role="status">{currentSubscription.trial_ends_at ? "Your trial has ended" : "Your paid access ended"} on {day(currentSubscription.paid_until)}. Renew to use Morrow. Your files and payment history remain available.</p>}{currentSubscription?.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && !["trial_canceled","cancelled","expired","completed"].includes(currentSubscription.status) && <button disabled={Boolean(busy)} onClick={() => changeSubscription("cancel", currentSubscription)}>Cancel existing renewal</button>}<p>{snapshot?.betaInviteRequired ? "Enter your invitation to choose a plan." : "Choose a plan to start using Morrow."}</p><button className={styles.primary} onClick={() => setManageAccount(false)}>{snapshot?.betaInviteRequired ? "Enter invite code" : "Choose a plan"} <ArrowRight /></button></>}
+        </> : <>{currentSubscription?.paid_until && <p role="status">{currentSubscription.trial_ends_at ? "Your trial has ended" : "Your paid access ended"} on {day(currentSubscription.paid_until)}. Renew to use Morrow. Your files and payment history remain available.</p>}{currentSubscription?.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && !["trial_canceled","cancelled","expired","completed"].includes(currentSubscription.status) && <button disabled={Boolean(busy)} onClick={() => changeSubscription("cancel", currentSubscription)}>{cancelRetryId === currentSubscription.id ? "Retry cancellation" : "Cancel existing renewal"}</button>}<p>{snapshot?.betaInviteRequired ? "Enter your invitation to choose a plan." : "Choose a plan to start using Morrow."}</p><button className={styles.primary} onClick={() => setManageAccount(false)}>{snapshot?.betaInviteRequired ? "Enter invite code" : "Choose a plan"} <ArrowRight /></button></>}
       </div>
       {selectedAccount?.kind === "company" && <details className={styles.management}><summary>Manage team seats</summary>
         <form onSubmit={assignSeat}><label className={styles.field}>Email<input type="email" value={seatEmail} onChange={(event) => setSeatEmail(event.target.value)} placeholder="name@company.com" required /></label><button disabled={Boolean(busy) || !hasPaidAccess}>Assign seat</button></form>
