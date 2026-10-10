@@ -11,12 +11,13 @@ type Props = {
   busy: boolean; error: string; notice: string; signInAvailable: boolean; canConnect: boolean;
   onSignIn: () => void; onSignOut: () => void; onRefresh: () => void; onAccount: () => void;
   accountControl?: ReactNode; authContent?: ReactNode; authTitle?: string;
+  onRetryPayment?: () => void;
   onBack: () => void; onConnect: () => void; children?: ReactNode;
 };
 
 export function BillingJourney(props: Props) {
   const { stage, email, busy, desktopRequest, desktopConnected } = props;
-  const activeStep = stage === "sign-in" || stage === "loading" || stage === "unavailable" ? 0 : stage === "invite" || stage === "plan" ? 1 : stage === "confirming" ? 2 : 3;
+  const activeStep = stage === "sign-in" || stage === "loading" || stage === "unavailable" ? 0 : stage === "invite" || stage === "plan" ? 1 : stage === "confirming" || stage === "payment-recovery" ? 2 : 3;
   return <div className={styles.site}>
     <header className={styles.header}>
       <a href="/" aria-label="Morrow home"><img src="/morrow/wordmark.png" alt="morrow" width="118" height="39" /></a>
@@ -48,6 +49,12 @@ export function BillingJourney(props: Props) {
         {props.authContent || <><button className={styles.primary} onClick={props.onSignIn} disabled={busy || !props.signInAvailable}>Sign in or create account <ArrowRight /></button>
         {!props.signInAvailable && <p role="status">Sign-in is unavailable right now. Please try again later.</p>}</>}
         {!props.authContent && <p className={styles.finePrint}>Already subscribed? Use the same account to pick up where you left off.</p>}
+      </section>}
+      {stage === "payment-recovery" && <section className={styles.state} role="alert">
+        <h1>We couldn't confirm this payment.</h1>
+        <p>A charge may still have gone through. Check your bank or invoices before trying again.</p>
+        <button className={styles.secondary} onClick={props.onRetryPayment} disabled={busy}>Try again</button>
+        <a className={styles.supportNote} href={`${help}?subject=Morrow%20payment%20confirmation`}>Contact support</a>
       </section>}
       {stage === "confirming" && <section className={styles.state} aria-live="polite">
         <SpinnerGap className={styles.spin} size={32} /><h1>Confirming with your bank.</h1>

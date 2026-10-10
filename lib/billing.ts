@@ -32,8 +32,12 @@ export function parseBillingCatalog(value: unknown): { plans: BillingPlan[]; mod
   return { ...result.data, trial: result.data.trial ?? trialOff };
 }
 
-export function parsePendingPayment(value: unknown): { desktopRequest: string } | null {
-  const result = z.object({ desktopRequest: z.union([z.literal(""), z.uuidv4()]) }).safeParse(value);
+export type PendingPayment = { desktopRequest: string; subscriptionId?: string; startedAt?: number };
+export function parsePendingPayment(value: unknown): PendingPayment | null {
+  const result = z.object({ desktopRequest: z.union([z.literal(""), z.uuidv4()]),
+    subscriptionId: z.string().min(1).max(128).optional(),
+    startedAt: z.number().finite().nonnegative().max(Date.now()).optional(),
+  }).safeParse(value);
   return result.success ? result.data : null;
 }
 
@@ -74,6 +78,7 @@ export const checkoutReplySchema = z.object({
   subscriptionId: z.string().min(1), keyId: z.string().min(1), email: z.string(), name: z.string(),
   paymentMethod: z.enum(["upi", "card"]).optional(),
   trialEndsAt: z.iso.datetime({ offset: true }).nullable().optional().default(null),
+  trialAuthorizationExpiresAt: z.iso.datetime({ offset: true }).nullable().optional().default(null),
   chargeAmountPaise: z.number().int().nonnegative().optional(),
   amountPaise: z.number().int().nonnegative().optional(),
 });

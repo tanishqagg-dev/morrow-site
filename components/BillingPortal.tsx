@@ -7,7 +7,7 @@ import { BillingError, parseCheckoutReply, billingQuote, firstPaymentQuote, bill
 import type { BillingTrial, CheckoutReply, BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription } from "@/lib/billing";
 import styles from "./SubscriptionFlow.module.css";
 import { BillingJourney } from "./BillingJourney";
-import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay } from "@/lib/subscription-flow";
+import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
@@ -147,7 +147,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [paymentMode, setPaymentMode] = useState<"test" | "live" | null>(null);
   const [trialConfig, setTrialConfig] = useState<BillingTrial>({ enabled: false, days: 7 });
   const [trialDeclined, setTrialDeclined] = useState(false);
-  const [preparedCheckout, setPreparedCheckout] = useState<{ reply: CheckoutReply; context: string } | null>(null);
+  const [preparedCheckout, setPreparedCheckout] = useState<{ reply: CheckoutReply; context: string; preparedAt: number } | null>(null);
   const [plans, setPlans] = useState<BillingPlan[]>([]);
   const [snapshotFailed, setSnapshotFailed] = useState(false);
   const [authTimedOut, setAuthTimedOut] = useState(false);
@@ -173,27 +173,32 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   }, []);
   const [paymentPending, setPaymentPending] = useState(false);
   const [paymentDesktopRequest, setPaymentDesktopRequest] = useState("");
+  const pendingReceipt = useRef<NonNullable<ReturnType<typeof parsePendingPayment>> | null>(null);
+  const [paymentRecovery, setPaymentRecovery] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelRetryId, setCancelRetryId] = useState<string | null>(null);
   const connectionLock = useRef(false);
   const pendingKey = `morrow:payment-pending:${identity?.userId}:${selectedAccountId}`;
-  const rememberPendingPayment = (pending: boolean) => {
+  const rememberPendingPayment = (pending: boolean, subscriptionId?: string) => {
+    const receipt = pending ? { desktopRequest, subscriptionId, startedAt: Date.now() } : null;
+    pendingReceipt.current = receipt;
     setPaymentPending(pending);
     setPaymentDesktopRequest(pending ? desktopRequest : "");
     try {
-      if (pending) sessionStorage.setItem(pendingKey, JSON.stringify({ desktopRequest }));
+      if (pending) sessionStorage.setItem(pendingKey, JSON.stringify(receipt));
       else sessionStorage.removeItem(pendingKey);
     } catch { /* The server remains the source of account access. */ }
   };
   useEffect(() => {
-    setConfirmCancel(false); setError(""); setNotice("");
+    setConfirmCancel(false); setError(""); setNotice(""); setPaymentRecovery(false);
     try {
       const saved = sessionStorage.getItem(pendingKey);
       const receipt = saved ? parsePendingPayment(JSON.parse(saved)) : null;
       if (saved && !receipt) sessionStorage.removeItem(pendingKey);
+      pendingReceipt.current = receipt;
       setPaymentPending(Boolean(receipt));
       setPaymentDesktopRequest(typeof receipt?.desktopRequest === "string" ? receipt.desktopRequest : "");
-    } catch { setPaymentPending(false); setPaymentDesktopRequest(""); }
+    } catch { pendingReceipt.current = null; setPaymentPending(false); setPaymentDesktopRequest(""); }
   }, [pendingKey]);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -394,33 +399,41 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (couponCode.trim() && !appliedCoupon) throw new Error("Apply your coupon or remove it before continuing.");
     await loadRazorpayCheckout();
     if (checkoutUser !== activeUserId.current) return;
-    const requestId = crypto.randomUUID();
     let result = prepared;
+    if (result && trialEligible && trialAuthorizationExpired(result, preparedCheckout?.preparedAt ?? 0)) {
+      result = null; setPreparedCheckout(null);
+      setNotice("This checkout expired. Review your new trial date before continuing.");
+    }
     if (!result) {
-    try {
-    result = parseCheckoutReply(await billingRequest<unknown>("billing-customer", {
-      action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
-      quantity: audience === "company" ? seats : 1, requestId, trial: trialEligible, desktopRequestId: desktopRequest || undefined, couponCode: appliedCoupon?.code, inviteCode,
-      ...(appliedCoupon?.duration === "first_cycle" ? {paymentMethod: couponPaymentMethod} : {}),
-    }, await authToken()));
-    } catch (caught) {
-      if (caught instanceof BillingError && caught.code === "TRIAL_CHECKOUT_EXPIRED") {
-        setPreparedCheckout(null); setNotice("This checkout expired. Review your trial again to get a new date.");
-        return;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const requestId = crypto.randomUUID();
+          result = parseCheckoutReply(await billingRequest<unknown>("billing-customer", {
+            action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
+            quantity: audience === "company" ? seats : 1, requestId, trial: trialEligible, desktopRequestId: desktopRequest || undefined, couponCode: appliedCoupon?.code, inviteCode,
+            ...(appliedCoupon?.duration === "first_cycle" ? {paymentMethod: couponPaymentMethod} : {}),
+          }, await authToken()));
+          break;
+        } catch (caught) {
+          if (caught instanceof BillingError && caught.code === "TRIAL_CHECKOUT_EXPIRED") {
+            setPreparedCheckout(null);
+            if (attempt === 0) { setNotice("This checkout expired. Preparing a new checkout."); continue; }
+            throw new Error("This checkout expired again. Try again in a minute.");
+          }
+          if (caught instanceof BillingError && caught.code === "TRIAL_NOT_AVAILABLE") {
+            setTrialDeclined(true); setPreparedCheckout(null);
+            setNotice("This account cannot start another trial. You can subscribe to the plan below.");
+            return;
+          }
+          throw caught;
+        }
       }
-      if (caught instanceof BillingError && caught.code === "TRIAL_NOT_AVAILABLE") {
-        setTrialDeclined(true); setPreparedCheckout(null);
-        setNotice("This account cannot start another trial. You can subscribe to the plan below.");
-        return;
+      if (!result || checkoutUser !== activeUserId.current) return;
+      setPreparedCheckout({ reply: result, context: checkoutContext, preparedAt: Date.now() });
+      if (trialEligible) {
+        if (!result.trialEndsAt) throw new Error("The trial's first charge date is unavailable. Check your account before trying again.");
+        return; // Show the fixed server date before the customer authorizes their bank.
       }
-      throw caught;
-    }
-    if (checkoutUser !== activeUserId.current) return;
-    setPreparedCheckout({ reply: result, context: checkoutContext });
-    if (trialEligible) {
-      if (!result.trialEndsAt) throw new Error("The trial's first charge date is unavailable. Check your account before trying again.");
-      return; // Show the fixed server date before the customer authorizes their bank.
-    }
     }
     if (trialEligible && (!result.trialEndsAt || Date.parse(result.trialEndsAt) <= Date.now())) {
       setPreparedCheckout(null); setNotice("This checkout expired. Review your trial again to get a new date.");
@@ -440,7 +453,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         checkoutLock.current = false; setCheckoutOpen(false);
         if (checkoutUser !== activeUserId.current) return;
         const details = response as { razorpay_payment_id?: string; razorpay_subscription_id?: string; razorpay_signature?: string };
-        rememberPendingPayment(true);
+        rememberPendingPayment(true, result.subscriptionId);
         void run("confirm", async () => {
           await billingRequest("billing-customer", {
             action: "confirm_checkout", subscriptionId: details.razorpay_subscription_id,
@@ -498,6 +511,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
 
   const refreshAccess = () => void run("refresh", async () => {
     if (identityRef.current?.loaded === false) { window.location.reload(); return; }
+    if (paymentPending) { await pendingCheck.current(); return; }
     const userId = activeUserId.current;
     const latest = await refresh();
     if (latest && paidSeatForAccount(latest, selectedAccountId, identityRef.current?.email || null)) {
@@ -509,11 +523,29 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const pendingCheck = useRef<() => Promise<boolean>>(async () => false);
   pendingCheck.current = async () => {
     const userId = activeUserId.current;
-    const latest = await refresh();
-    if (!latest || userId !== activeUserId.current) return false;
-    if (!paidSeatForAccount(latest, selectedAccountId, identityRef.current?.email || null)) return false;
+    const receipt = pendingReceipt.current;
+    const accountId = selectedAccountId;
+    if (!receipt) return true;
+    const recover = () => {
+      rememberPendingPayment(false);
+      setPreparedCheckout(null); setError(""); setNotice(""); setPaymentRecovery(true);
+      return true;
+    };
+    // Bound confirmation even when every request fails or the browser is offline.
+    if (pendingPaymentOutcome(null, accountId, receipt, false) === "failed") return recover();
+    let latest: BillingSnapshot | undefined;
+    try { latest = await refresh(); }
+    catch {
+      if (receipt !== pendingReceipt.current || userId !== activeUserId.current || accountId !== selectedAccountRef.current) return true;
+      return pendingPaymentOutcome(null, accountId, receipt, false) === "failed" ? recover() : false;
+    }
+    if (receipt !== pendingReceipt.current || userId !== activeUserId.current || accountId !== selectedAccountRef.current) return true;
+    const outcome = pendingPaymentOutcome(latest, accountId, receipt,
+      Boolean(latest && paidSeatForAccount(latest, accountId, identityRef.current?.email || null)));
+    if (outcome === "waiting") return false;
+    if (outcome === "failed") return recover();
     rememberPendingPayment(false);
-    if (paymentDesktopRequest === desktopRequest) await connectAfterPayment(latest, selectedAccountId, userId);
+    if (latest && paymentDesktopRequest === desktopRequest) await connectAfterPayment(latest, accountId, userId);
     return true;
   };
   useEffect(() => {
@@ -541,7 +573,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   }, [hasPaidAccess, desktopRequest, desktopConnected, selectedAccountId]);
 
   const stage = subscriptionStage({ loadFailed: authTimedOut || snapshotFailed, loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
-    hasPaidAccess, paymentPending, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
+    hasPaidAccess, paymentPending, paymentRecovery, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
 
   const assignSeat = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -594,6 +626,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
 
   return <BillingJourney authTitle={authTitle} authContent={authContent} accountControl={accountControl} stage={stage} email={identity?.email || null} desktopRequest={Boolean(desktopRequest)}
     desktopConnected={desktopConnected} busy={Boolean(busy) || desktopConnecting} error={error} notice={notice}
+    onRetryPayment={() => { setPaymentRecovery(false); setManageAccount(false); setPreparedCheckout(null); setError(""); setNotice(""); void refreshAccess(); }}
     signInAvailable={Boolean(identity)} onSignIn={signIn} onRefresh={refreshAccess}
     onSignOut={() => void identity?.signOut()} onAccount={() => setManageAccount(true)}
     onBack={() => { setManageAccount(false); setConfirmCancel(false); }}
