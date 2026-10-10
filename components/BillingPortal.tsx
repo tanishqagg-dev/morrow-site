@@ -52,13 +52,21 @@ export function BillingPortal() {
       borderRadius: "14px", fontFamily: "Satoshi, -apple-system, BlinkMacSystemFont, Arial, sans-serif",
     },
     elements: {
+      header: { display: "none" },
       headerTitle: { display: "none" },
       headerSubtitle: { display: "none" },
       footer: { background: "transparent", backgroundImage: "none" },
       rootBox: { width: "100%" },
-      cardBox: { width: "100%", boxShadow: "none" },
-      card: { boxShadow: "none", background: "transparent", border: 0 },
-      socialButtonsBlockButton: { color: "#111111", borderColor: "#dedede", minHeight: "46px" },
+      cardBox: { width: "100%", boxShadow: "none", overflow: "visible", borderRadius: 0 },
+      card: { boxShadow: "none", background: "transparent", border: 0, padding: 0, gap: "24px" },
+      main: { gap: "24px" },
+      socialButtons: { width: "100%", display: "grid", gridTemplateColumns: "1fr", gap: "12px" },
+      socialButtonsProviderIcon: { width: "18px", height: "18px" },
+      formFieldInput: { boxShadow: "none", border: "1px solid #dedede", borderRadius: "10px", minHeight: "48px" },
+      formFieldCheckboxInput__legalAccepted: { margin: 0, flexShrink: 0, borderRadius: "4px" },
+      formFieldCheckboxLabel: { margin: 0, lineHeight: "20px" },
+      socialButtonsBlockButton: { width: "100%", color: "#111111", border: "1px solid #dedede", borderRadius: "10px", minHeight: "48px", boxShadow: "none", background: "#ffffff" },
+      formButtonPrimary: { boxShadow: "none", minHeight: "48px" },
       socialButtonsBlockButtonText: { color: "#111111" },
       footerActionLink: { color: "#111111", fontWeight: 700 },
     },
@@ -91,10 +99,6 @@ function ClerkBillingPortal() {
     signOut: () => clerk.signOut(),
   }), [clerk, getToken, isLoaded, user?.primaryEmailAddress?.emailAddress, userId]);
   return <BillingPortalContent key={userId || "signed-out"} identity={identity} authTitle={authMode === "sign-up" ? "Create your Morrow account." : "Sign in to Morrow."} authContent={<div className={styles.embeddedAuth}>
-    <div className={styles.authTabs} role="group" aria-label="Account access">
-      <button aria-pressed={authMode === "sign-up"} onClick={() => setAuthMode("sign-up")}>Create account</button>
-      <button aria-pressed={authMode === "sign-in"} onClick={() => setAuthMode("sign-in")}>Sign in</button>
-    </div>
     {authMode === "sign-up" ? <SignUp routing="hash" forceRedirectUrl={returnUrl} signInForceRedirectUrl={returnUrl} signInUrl={`${returnUrl}#sign-in`} /> : <SignIn routing="hash" forceRedirectUrl={returnUrl} signUpForceRedirectUrl={returnUrl} signUpUrl={`${returnUrl}#sign-up`} />}
   </div>} accountControl={userId ?
     <UserButton>
@@ -605,19 +609,23 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       </div>}
       <div className={styles.plan} aria-label="Your plan">
         <div className={styles.planHeading}><h2>Morrow {audience === "company" ? "Business" : "Personal"}</h2><span>For {audience === "company" ? "your team" : "you"}</span></div>
-        <p className={styles.price}>{trialEligible ? "₹0" : appliedCoupon?.duration === "fixed" ? "No charge" : (activePlan ? rupees(monthlyEquivalent) : "Price unavailable")}{appliedCoupon?.duration !== "fixed" && <span>{trialEligible ? "today for your trial" : "/ month including GST"}</span>}</p>
-        <p className={styles.termNote}>{trialEligible ? "Monthly billing starts when your trial ends." : appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : appliedCoupon?.duration === "first_cycle" ? `${firstPaymentTerms} Cancel renewal anytime.` : period === "yearly" ? `${rupees(totalCharge)} billed yearly, including GST.` : "Billed monthly. Cancel renewal anytime."}</p>
-        {trialEligible && <div className={styles.trialTerms} aria-live="polite">
-          {trialEndsAt ? <><p><strong>{rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} on {day(trialEndsAt)}</strong> ({rupees(quote)} + GST), then monthly.</p><p>Cancel any time before {day(trialEndsAt)} from Morrow or this page.</p></> : <p>Review your trial to see the exact first charge date before authorizing your bank.</p>}
-          <p>Your bank may show a ₹5 check. It is refunded automatically. <a href="https://razorpay.com/docs/payments/subscriptions/faqs/" target="_blank" rel="noopener noreferrer">How authorization works</a>.</p>
-        </div>}
+        {trialEligible ? <>
+          <ol className={styles.trialTimeline} aria-label="Your trial timeline" aria-live="polite">
+            <li><div><span className={styles.timelineDate}>Today</span><strong className={styles.timelineAmount}>₹0</strong><p>Set up AutoPay to start your trial.</p></div></li>
+            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge</strong><p>{rupees(quote)} + GST, then monthly.</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
+          </ol>
+          <p className={styles.authorizationNote}>Your bank may show a ₹5 check. It is refunded automatically. <a href="https://razorpay.com/docs/payments/subscriptions/faqs/" target="_blank" rel="noopener noreferrer">How authorization works ↗</a></p>
+        </> : <>
+          <p className={styles.price}>{appliedCoupon?.duration === "fixed" ? "No charge" : (activePlan ? rupees(monthlyEquivalent) : "Price unavailable")}{appliedCoupon?.duration !== "fixed" && <span>/ month including GST</span>}</p>
+          <p className={styles.termNote}>{appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : appliedCoupon?.duration === "first_cycle" ? `${firstPaymentTerms} Cancel renewal anytime.` : period === "yearly" ? `${rupees(totalCharge)} billed yearly, including GST.` : "Billed monthly. Cancel renewal anytime."}</p>
+        </>}
         <ul className={styles.benefits}>
           <li><CheckCircle aria-hidden="true" />Voice and text on your Mac</li>
           <li><CheckCircle aria-hidden="true" />Work with files and connected apps</li>
-          <li><CheckCircle aria-hidden="true" />Manage your subscription from your account</li>
+          <li><CheckCircle aria-hidden="true" />{trialEligible ? "Your ChatGPT subscription is separate" : "Manage your subscription from your account"}</li>
         </ul>
         {audience === "company" && <label className={styles.field}>Seats<input type="number" min={2} max={100} value={seats} disabled={Boolean(busy) || checkoutOpen} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>}
-        <details className={styles.coupon} open={couponCode ? true : undefined}>
+        <details className={`${styles.coupon} ${styles.planOption}`} open={couponCode ? true : undefined}>
           <summary>Have a coupon?</summary>
           <form onSubmit={applyCoupon}>
             <label htmlFor="billing-coupon" className={styles.srOnly}>Coupon code</label>
@@ -627,7 +635,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
             {appliedCoupon && <p role="status">{appliedCoupon.duration === "fixed" ? `${appliedCoupon.accessDays} days of access applied.` : appliedCoupon.duration === "first_cycle" ? firstPaymentTerms : "Discount applied to every renewal."} <button type="button" onClick={() => rememberCoupon("")}>Remove</button></p>}
           </form>
         </details>
-  <details className={styles.management}><summary>Business invoice (optional)</summary>
+  <details className={`${styles.management} ${styles.planOption}`}><summary>Business invoice (optional)</summary>
         <label><input type="checkbox" checked={businessInvoice} onChange={e=>setBusinessInvoice(e.target.checked)}/> Add my business GSTIN</label>
         {businessInvoice && <div className={styles.invoiceFields}>
           <label>Registered business name<input value={invoiceDetails.businessName} maxLength={160} onChange={e=>setInvoiceDetails({...invoiceDetails,businessName:e.target.value})}/></label>
@@ -637,11 +645,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           <p>{activePlan?.gstDiscountAvailable ? `With valid GSTIN details, Morrow funds a discount equal to the standard GST charge. Your total is ${rupees(activePlan.amountPaise)} per ${renewalPeriod}, including applicable GST. Coupons cannot be combined with this discount.` : "GST is included in the checkout total."} Your details go to our billing team for the GST invoice. A GSTIN does not guarantee input tax credit.</p>
         </div>}
       </details>
-            <dl className={styles.total}>
+            {!trialEligible && <dl className={styles.total}>
           <div><dt>Plan</dt><dd>{activePlan || appliedCoupon ? rupees(quote) : "Unavailable"}</dd></div>
           {appliedCoupon?.duration !== "fixed" && <div><dt>GST (18%{gstBenefit ? " after discount" : ""})</dt><dd>{activePlan || appliedCoupon ? rupees(gst) : "Unavailable"}</dd></div>}
           <div className={styles.totalFinal}><dt>Due today</dt><dd>{trialEligible ? "₹0" : activePlan || appliedCoupon ? rupees(totalCharge) : "Loading…"}</dd></div>
-        </dl>
+        </dl>}
 
         {paymentMode === "test" && <p className={styles.notice}>Test checkout. No real money is collected.</p>}
         {!activePlan && appliedCoupon?.duration !== "fixed" && <p className={styles.notice} role="status">{catalogState === "loading" ? "Loading plans…" : "This plan is not available for checkout yet. Choose another billing period or try again later."}</p>}
@@ -654,12 +662,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || (!activePlan && appliedCoupon?.duration !== "fixed")}>
           {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
-        <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable right now. Try refreshing your account." : trialEligible ? "UPI AutoPay and cards are supported. Your monthly subscription starts when the trial ends." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} including GST for your first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod} including GST until cancelled. The GSTIN discount does not combine with this coupon.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Renewals continue until you cancel.`}</p>
-        <p className={styles.finePrint}>Full refund within 7 days of your first payment. <a href="/refunds">Refund policy</a>.</p>
-        <p className={styles.finePrint}>By subscribing, you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy policy</a>. This is beta software; features may change or have bugs.</p>
-        {desktopRequest && <p className={styles.finePrint}>After bank confirmation, the Mac where you started sign-in will connect automatically. Continue only if this is your Mac.</p>}
+        <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
+        <p className={styles.finePrint}>By continuing, you agree to the <a href="/terms">Terms</a>.</p>
       </div>
-      <p className={styles.supportNote}>Your ChatGPT subscription is separate.</p>
+      {!trialEligible && <p className={styles.supportNote}>Your ChatGPT subscription is separate.</p>}
       {snapshot?.betaInviteRequired && <button className={styles.textButton} onClick={() => { setInviteAccepted(false); setError(""); }} disabled={Boolean(busy) || checkoutOpen}>Use a different invite code</button>}
       {bulkEmail && <p className={styles.supportNote}>Buying for a team? <a href={`mailto:${bulkEmail}?subject=Morrow%20bulk%20package`}>Contact us</a></p>}
     </section>}

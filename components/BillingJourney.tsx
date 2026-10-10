@@ -47,11 +47,11 @@ export function BillingJourney(props: Props) {
         <p>Your account connects your Mac and subscription.</p>
         {props.authContent || <><button className={styles.primary} onClick={props.onSignIn} disabled={busy || !props.signInAvailable}>Sign in or create account <ArrowRight /></button>
         {!props.signInAvailable && <p role="status">Sign-in is unavailable right now. Please try again later.</p>}</>}
-        <p className={styles.finePrint}>Already subscribed? Use the same account to pick up where you left off.</p>
+        {!props.authContent && <p className={styles.finePrint}>Already subscribed? Use the same account to pick up where you left off.</p>}
       </section>}
       {stage === "confirming" && <section className={styles.state} aria-live="polite">
         <SpinnerGap className={styles.spin} size={32} /><h1>Confirming with your bank.</h1>
-        <p>We are checking your bank authorization. {desktopRequest ? "Morrow will continue on your Mac once access is ready." : "Your subscription will appear here once access is ready."}</p>
+        <p>We are checking your bank authorization. {desktopRequest ? "The Mac where you started sign-in will connect automatically once access is ready." : "Your subscription will appear here once access is ready."}</p>
         <p className={styles.finePrint}>Please don’t pay again. It’s safe to check back here.</p>
         <button className={styles.secondary} onClick={props.onRefresh} disabled={busy}>{busy ? "Checking…" : "Check payment status"}</button>
         <a className={styles.supportNote} href={`${help}?subject=Morrow%20payment%20confirmation`}>Get help with this payment</a>
