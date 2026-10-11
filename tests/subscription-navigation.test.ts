@@ -18,7 +18,7 @@ test('subscription link opens management and account switches preserve the chose
     const context = { pendingKey: 'pending:user:account', URLSearchParams, window: { location: { search } },
       useEffect: (callback: () => void) => callback(), sessionStorage: { getItem: () => null }, parsePendingPayment: () => null,
       setManageAccount: (value: boolean) => { management = value; },
-      expiringRequest:{current:null}, setCheckoutExpiry(){}, pendingReceipt: { current: null }, checkoutFailure:{current:""},setCheckoutRecovery() {}, setPaymentRecovery() {}, setConfirmCancel() {}, setError() {}, setNotice() {}, setPaymentPending() {}, setPaymentDesktopRequest() {},
+      setConflictingCheckout(){}, expiringRequest:{current:null}, setCheckoutExpiry(){}, pendingReceipt: { current: null }, checkoutFailure:{current:""},setCheckoutRecovery() {}, setPaymentRecovery() {}, setConfirmCancel() {}, setError() {}, setNotice() {}, setPaymentPending() {}, setPaymentDesktopRequest() {},
     };
     const marker = 'setManageAccount(new URLSearchParams(window.location.search).get("view") === "subscription");';
     const start = source.lastIndexOf('useEffect(() => {', source.indexOf(marker));
@@ -122,7 +122,7 @@ test('account refresh scopes recovery to the selected account and keeps initial 
     const bindings = { activeUserId: { current: 'qa-user' }, selectedAccountRef, refreshSequence: { current: 0 },
       authToken: async () => 'test-session', billingRequest,
       identityRef: { current: { email: 'qa@example.test' } },
-      desktopRequestRef: { current: "" }, setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined,
+      desktopRequestRef: { current: "" }, setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setConflictingCheckout:vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined,
       useCallback: (callback: () => Promise<unknown>) => callback,
     };
     const start = source.indexOf('const refresh = useCallback');

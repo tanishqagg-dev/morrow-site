@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
+import {openCheckoutReceipt} from '../lib/open-checkout';
 import {waitForCheckout} from '../lib/checkout-expiring';
 import {assertCheckoutPrice} from '../lib/checkout-quote';
 import {checkoutMethods,checkoutMethodConfig} from '../lib/checkout-method';
@@ -22,7 +23,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
   let pending: Promise<void>;
   const open = vi.fn();
   const bindings = {
-    waitForCheckout, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
+    openCheckoutReceipt, setConflictingCheckout:vi.fn(), waitForCheckout, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
     pendingReceipt: {current:null}, pendingCheck: {current:vi.fn()}, checkoutFailure:{current:""}, setCheckoutRecovery:vi.fn(), setPaymentPending:vi.fn(),
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
@@ -37,8 +38,8 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
     ...overrides,
     run: (_name: string, work: () => Promise<void>) => { pending = work(); return pending.catch(() => {}); },
   };
-  const start = execute('  const startCheckout = (resume = false) => {', '  const forgetDesktop =', '\nreturn startCheckout;', bindings);
-  return { ...bindings, open, start: (resume = false) => { start(resume); return pending!; } };
+  const start = execute('  const startCheckout = (resume = false, serverCheckout?: OpenCheckout, fresh = false) => {', '  const forgetDesktop =', '\nreturn startCheckout;', bindings);
+  return { ...bindings, open, start: (resume = false, serverCheckout?: unknown) => { start(resume, serverCheckout); return pending!; } };
 }
 const receipt = { desktopRequest: '', subscriptionId: 'sub-provider', startedAt: now };
 const snapshot = (status: string, accountId = 'account') => ({ subscriptions: [{ id: 'local', razorpay_subscription_id: 'sub-provider', account_id: accountId, status }] }) as BillingSnapshot;
@@ -149,13 +150,13 @@ describe('bounded payment confirmation', () => {
     expect(bindings.pendingReceipt.current).toBeNull();
     expect(bindings.setPaymentPending).toHaveBeenLastCalledWith(false);
   });
-  it('blocks checkout when its authorization marker cannot be stored', () => {
+  it('BROWSER-05 retains recovery in memory when optional browser storage is unavailable', () => {
     const bindings = {setPaymentPending: vi.fn(), setPaymentDesktopRequest: vi.fn(), setCheckoutRecovery:vi.fn(), checkoutFailure:{current:""}, desktopRequest: '', pendingReceipt: {current: null}, pendingKey: 'pending',
       sessionStorage: {setItem: () => {throw new Error('Storage unavailable');}, removeItem: vi.fn()}};
     const remember = execute('  const rememberPendingPayment =', '  useEffect(() => {', '\nreturn rememberPendingPayment;', bindings);
-    expect(() => remember(true, 'sub-provider', {requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',userId:'user',expiresAt:now+600_000})).toThrow('save this payment');
-    expect(bindings.pendingReceipt.current).toBeNull();
-    expect(bindings.setPaymentPending).toHaveBeenLastCalledWith(false);
+    expect(() => remember(true, 'sub-provider', {requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',userId:'user',expiresAt:now+600_000})).not.toThrow();
+    expect(bindings.pendingReceipt.current).toMatchObject({subscriptionId:'sub-provider',userId:'user'});
+    expect(bindings.setPaymentPending).toHaveBeenLastCalledWith(true);
   });
   it.each(['cancelled','expired','halted','pending','trial_canceled','completed','paused'])('clears pending %s without inventing a successful payment', async status => {
     const flow = confirmationFlow(status);
@@ -264,4 +265,12 @@ it('RACE-03b keeps the request identity through 90 seconds and a manual Retry',a
   const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest});const first=flow.start();await vi.advanceTimersByTimeAsync(90000);await first;expect(flow.setCheckoutExpiry).toHaveBeenLastCalledWith('timeout');expect(flow.open).not.toHaveBeenCalled();
   billingRequest.mockImplementation(async(_endpoint,body)=>{if(body.action==='checkout'){requests.push(body);return reply();}return {};});await flow.start();expect(requests).toHaveLength(19);expect(requests.every(body=>JSON.stringify(body)===JSON.stringify(requests[0]))).toBe(true);expect(flow.setPreparedCheckout.mock.lastCall?.[0]).toMatchObject({reply:{subscriptionId:'sub-new'}});expect(flow.open).not.toHaveBeenCalled();
  } finally {vi.useRealTimers();}
+});
+
+const serverOpen = {id:'local',subscriptionId:'sub_server',requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',accountId:'account',planId:'monthly',planName:'Personal',period:'monthly' as const,quantity:1,couponCode:'INTRO',paymentMethod:'upi' as const,trial:false,amountPaise:11800,currency:'INR' as const,keyId:'rzp_test_fixture',expiresAt:new Date(now+3600000).toISOString(),resumable:true};
+it('BROWSER-05 opens the exact server subscription despite a stale local recovery receipt',async()=>{
+ let options:any;const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{selectedAccount:{id:'account',kind:'personal',billing_email:'buyer@example.test',name:'Buyer'},paymentPending:true,pendingReceipt:{current:{userId:'user',subscriptionId:'old',checkout:{priceConfirmed:false}}},window:{Razorpay:class {constructor(value:any){options=value;}open(){}on(){}}}});await flow.start(true,serverOpen);expect(options).toMatchObject({subscription_id:'sub_server',key:'rzp_test_fixture',amount:11800,prefill:{email:'buyer@example.test',name:'Buyer'}});expect(flow.billingRequest.mock.calls.some(([,body])=>body.action==='checkout')).toBe(false);
+});
+it('BROWSER-05 displays the server conflict instead of a bare checkout error',async()=>{
+ const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest:vi.fn(async(_endpoint,body)=>{if(body.action==='checkout')throw new BillingError('Unfinished','OPEN_CHECKOUT',undefined,serverOpen);return {};})});await flow.start();expect(flow.setConflictingCheckout).toHaveBeenCalledWith(serverOpen);expect(flow.open).not.toHaveBeenCalled();
 });

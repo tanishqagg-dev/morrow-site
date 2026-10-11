@@ -34,7 +34,7 @@ if(process.argv.includes('--check')) {
    await run(process.execPath,['scripts/qa-round5-site.mjs']);
    await run(process.execPath,['scripts/qa-round5-pairing.mjs']);
    await run(process.execPath,['scripts/qa-round5-gst.mjs','--recipients']);
-  } else if(process.argv.includes('--checkout')) await run(process.execPath,['scripts/qa-round5-checkout.mjs',...(process.argv.includes('--quick')?['--quick']:[]),...(process.argv.includes('--blocked')?['--blocked']:[]),...(process.argv.includes('--expiring')?['--expiring']:[])]);
+  } else if(process.argv.includes('--checkout')) await run(process.execPath,['scripts/qa-round5-checkout.mjs',...(process.argv.includes('--quick')?['--quick']:[]),...(process.argv.includes('--blocked')?['--blocked']:[]),...(process.argv.includes('--expiring')?['--expiring']:[]),...(process.argv.includes('--server-open')?['--server-open']:[])]);
   else await run(process.execPath,[process.argv.includes('--pairing')?'scripts/qa-round5-pairing.mjs':process.argv.includes('--gst')?'scripts/qa-round5-gst.mjs':'scripts/qa-round5-site.mjs',...(process.argv.includes('--recipients')?['--recipients']:[])]);
  } finally {try{process.kill(-server.pid,'SIGTERM');}catch{}}
 }

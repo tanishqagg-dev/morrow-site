@@ -7,7 +7,7 @@ function portal() {
   const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
   const bindings = { refreshSequence: { current: 0 }, activeUserId: { current: 'qa-user' }, selectedAccountRef: { current: 'account-a' },
     authToken: vi.fn(async () => 'test-session'), billingRequest: vi.fn(), identityRef: { current: { email: 'qa@example.test' } },
-    desktopRequestRef: { current: "" }, setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined, useCallback: (fn: unknown) => fn };
+    desktopRequestRef: { current: "" }, setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setConflictingCheckout:vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined, useCallback: (fn: unknown) => fn };
   const start = source.indexOf('const refresh = useCallback');
   const end = source.indexOf('}, [authToken]);', start) + '}, [authToken]);'.length;
   const code = ts.transpileModule(source.slice(start, end) + '\nreturn refresh;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;

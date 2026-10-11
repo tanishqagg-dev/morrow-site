@@ -50,3 +50,8 @@ it('RACE-03b preserves the top-level retryAfter on CHECKOUT_EXPIRING errors',asy
  vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','public-test-key');vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({error:{code:'CHECKOUT_EXPIRING'},retryAfter:7},{status:409})));
  const {billingRequest}=await import('../lib/billing');await expect(billingRequest('billing-customer',{action:'checkout'},'test-token')).rejects.toMatchObject({code:'CHECKOUT_EXPIRING',retryAfter:7});
 });
+
+it('BROWSER-05 preserves the authenticated OPEN_CHECKOUT conflict details',async()=>{
+ vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','public-test-key');const openCheckout={id:'local',subscriptionId:'sub_open',requestId:'request',accountId:'account',planId:'monthly',planName:'Personal',period:'monthly',quantity:1,couponCode:null,paymentMethod:'upi',trial:false,amountPaise:11800,currency:'INR',keyId:'rzp_test_fixture',expiresAt:null,resumable:true};vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({openCheckout,error:{code:'OPEN_CHECKOUT',message:'Unfinished checkout'}},{status:409})));
+ const {billingRequest}=await import('../lib/billing');await expect(billingRequest('billing-customer',{action:'checkout'},'test-token')).rejects.toMatchObject({code:'OPEN_CHECKOUT',openCheckout});
+});
