@@ -10,6 +10,7 @@ import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
+import { clearDesktopRequest, resolveDesktopRequest, type StoredDesktopRequest } from "@/lib/desktop-storage";
 import { DesktopConsent } from "./DesktopConsent";
 import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consent";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
@@ -92,13 +93,29 @@ function ClerkBillingPortal() {
   const { isLoaded, userId, getToken } = useAuth();
   const { user } = useUser();
   const clerk = useClerk();
+  const previousUserId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (previousUserId.current && previousUserId.current !== userId) {
+      try { clearDesktopRequest(sessionStorage); } catch { /* Optional storage. */ }
+      const url = new URL(window.location.href); url.searchParams.delete("desktop");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+      setReturnUrl(url.pathname + url.search);
+    }
+    previousUserId.current = userId || null;
+  }, [isLoaded, userId]);
   const identity = useMemo<CustomerIdentity>(() => ({
     loaded: isLoaded,
     userId: userId || null,
     email: user?.primaryEmailAddress?.emailAddress || null,
     getToken: () => getToken(),
     openSignIn: () => { void clerk.openSignIn({ fallbackRedirectUrl: "/subscribe" }); },
-    signOut: () => clerk.signOut(),
+    signOut: () => {
+      try { clearDesktopRequest(sessionStorage); } catch { /* Optional storage. */ }
+      const url = new URL(window.location.href); url.searchParams.delete("desktop");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+      return clerk.signOut();
+    },
   }), [clerk, getToken, isLoaded, user?.primaryEmailAddress?.emailAddress, userId]);
   return <BillingPortalContent key={userId || "signed-out"} identity={identity} authTitle={authMode === "sign-up" ? "Create your Morrow account." : "Sign in to Morrow."} authContent={<div className={styles.embeddedAuth}>
     {authMode === "sign-up" ? <SignUp routing="hash" forceRedirectUrl={returnUrl} signInForceRedirectUrl={returnUrl} signInUrl={`${returnUrl}#sign-in`} /> : <SignIn routing="hash" forceRedirectUrl={returnUrl} signUpForceRedirectUrl={returnUrl} signUpUrl={`${returnUrl}#sign-up`} />}
@@ -246,15 +263,25 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     return billingAuthToken(() => identityRef.current?.getToken() ?? Promise.resolve(null));
   }, []);
 
+  const storedDesktopRequest = useRef<StoredDesktopRequest | null>(null);
   useEffect(() => {
+    if (identity?.loaded === false) return;
     const incoming = new URLSearchParams(window.location.search).get("desktop");
-    const valid = (value: string | null) => Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
+    let saved: unknown = null;
+    try { const raw = sessionStorage.getItem("morrow:desktop-request"); saved = raw ? JSON.parse(raw) : null; } catch { /* Ignore legacy or unavailable storage. */ }
+    const entry = resolveDesktopRequest(saved, incoming, identity?.userId || null);
+    storedDesktopRequest.current = entry;
+    desktopRequestRef.current = entry?.requestId || ""; setDesktopRequest(entry?.requestId || "");
+    setDesktopDetails(null); setDesktopProblem(""); setCodeConfirmed(false); setDesktopConnected(false);
     try {
-      if (valid(incoming)) sessionStorage.setItem("morrow:desktop-request", incoming!);
-      const saved = incoming || sessionStorage.getItem("morrow:desktop-request");
-      if (valid(saved)) { desktopRequestRef.current = saved!; setDesktopRequest(saved!); }
-    } catch { if (valid(incoming)) { desktopRequestRef.current = incoming!; setDesktopRequest(incoming!); } }
-  }, []);
+      if (entry) sessionStorage.setItem("morrow:desktop-request", JSON.stringify(entry));
+      else clearDesktopRequest(sessionStorage);
+    } catch { /* The URL remains usable without storage. */ }
+    if (!entry && incoming) {
+      const url = new URL(window.location.href); url.searchParams.delete("desktop");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  }, [identity?.loaded, identity?.userId]);
 
   const refresh = useCallback(async () => {
     const userId = activeUserId.current;
@@ -490,7 +517,8 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
 
   const forgetDesktop = () => {
     desktopRequestRef.current = ""; setDesktopRequest(""); setDesktopDetails(null); setDesktopProblem(""); setCodeConfirmed(false); setDesktopConnected(false);
-    try { sessionStorage.removeItem("morrow:desktop-request"); } catch { /* Optional storage. */ }
+    storedDesktopRequest.current = null;
+    try { clearDesktopRequest(sessionStorage); } catch { /* Optional storage. */ }
     const url = new URL(window.location.href); url.searchParams.delete("desktop");
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
   };
@@ -503,6 +531,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       const result = await billingRequest<{ request: DesktopRequest }>("billing-customer", { action: "desktop_request", requestId: desktopRequest }, await authToken());
       if (cancelled || userId !== activeUserId.current) return;
       setDesktopDetails(result.request); setCodeConfirmed(false);
+      const entry = storedDesktopRequest.current;
+      if (entry) {
+        entry.expiresAt = Math.min(entry.expiresAt, Date.parse(result.request.expiresAt));
+        try { sessionStorage.setItem("morrow:desktop-request", JSON.stringify(entry)); } catch { /* Optional storage. */ }
+      }
       setDesktopConnected(result.request.status === "connected");
     })().catch(caught => {
       if (!cancelled && userId === activeUserId.current) {
@@ -660,7 +693,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     desktopConnected={desktopConnected} busy={Boolean(busy) || desktopConnecting} error={error} notice={notice}
     onRetryPayment={() => { setPaymentRecovery(false); setManageAccount(false); setPreparedCheckout(null); setError(""); setNotice(""); void refreshAccess(); }}
     signInAvailable={Boolean(identity)} onSignIn={signIn} onRefresh={refreshAccess}
-    onSignOut={() => void identity?.signOut()} onAccount={() => setManageAccount(true)}
+    onSignOut={() => { forgetDesktop(); void identity?.signOut(); }} onAccount={() => setManageAccount(true)}
     onBack={() => { setManageAccount(false); setConfirmCancel(false); }}
     canConnect={claimableSeats.some((seat) => seat.account_id === selectedAccountId)}
     onConnect={() => { const seat = claimableSeats.find((item) => item.account_id === selectedAccountId); if (seat) connectDesktop(seat); }}>
