@@ -59,7 +59,7 @@ export type BillingAccount = {
   owner_user_id: string; created_at: string; invoice_profile?: InvoiceProfile | null; invoice_recipient_name?: string | null;
 };
 
-const subscriptionStatusSchema = z.enum(["creating", "created", "authenticated", "active", "pending", "halted", "paused", "cancelled", "completed", "expired", "trialing", "trial_canceled", "unknown"]).catch("unknown");
+const subscriptionStatusSchema = z.enum(["creating", "created", "authenticated", "active", "pending", "halted", "paused", "cancelled", "completed", "expired", "superseded", "trialing", "trial_canceled", "unknown"]).catch("unknown");
 export type BillingSubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
 export type BillingSubscription = {
   id: string; account_id: string; plan_id: string; razorpay_subscription_id: string | null;
@@ -132,7 +132,7 @@ export class BillingError extends Error {
 
 export function paidSeatForAccount(snapshot: BillingSnapshot, accountId: string, email: string | null, now = Date.now()) {
   const paid = snapshot.subscriptions.some((subscription) => subscription.account_id === accountId
-    && subscription.paid_until && Date.parse(subscription.paid_until) > now);
+    && subscription.status !== "superseded" && subscription.paid_until && Date.parse(subscription.paid_until) > now);
   if (!paid || !email) return undefined;
   return snapshot.seats.find((seat) => seat.account_id === accountId
     && seat.email.toLowerCase() === email.toLowerCase() && seat.licenseStatus !== "revoked");

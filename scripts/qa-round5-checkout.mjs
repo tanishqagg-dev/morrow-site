@@ -13,17 +13,17 @@ const company={...personal,id:'company-yearly',code:'COMPANY_YEARLY',name:'Morro
 const monthlyCompany={...company,id:'company-monthly',period:'monthly',code:'COMPANY_MONTHLY'};
 const report=[];
 try {
- for(const width of (process.argv.includes('--quick')?[390]:[1440,390])) for(const state of (process.argv.includes('--server-open')?['server-fresh','server-conflict','server-resume','server-change','server-expired']:process.argv.includes('--expiring')?['finishing-up','finishing-timeout']:process.argv.includes('--blocked')?['price-changed']:process.argv.includes('--quick')?['failed','uncertain']:['closed','resume','change-plan','failed','late-created','abandon-unverified','abandon-payment-pending','uncertain','quote','price-changed','seats','seat-upi','seat-unknown','documents-paired','replace-code'])) {
+ for(const width of (process.argv.includes('--quick')?[390]:[1440,390])) for(const state of (process.argv.includes('--server-open')?['server-fresh','server-conflict','server-resume','server-change','server-expired']:process.argv.includes('--expiring')?['finishing-up','finishing-retry','superseded']:process.argv.includes('--blocked')?['price-changed']:process.argv.includes('--quick')?['failed','uncertain']:['closed','resume','change-plan','failed','late-created','abandon-unverified','abandon-payment-pending','uncertain','quote','price-changed','seats','seat-upi','seat-unknown','documents-paired','replace-code'])) {
   const context=await browser.newContext({viewport:{width,height:width===390?844:900},reducedMotion:'reduce'});
   const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));const calls=[];
   const serverOpen=state.startsWith('server-');
   const expiring=state.startsWith('finishing-');
   const team=['seats','seat-upi','seat-unknown'].includes(state),paid=team||['documents-paired','replace-code'].includes(state),plan=team?company:personal;
   const account={id:accountId,kind:team?'company':'personal',name:team?'QA team':'Personal account',billing_email:'qa@example.test',owner_user_id:'qa-user',created_at:recent,invoice_recipient_name:'QA Buyer',invoice_profile:{kind:'consumer',stateCode:'07'}};
-  const subscription={id:'local',account_id:accountId,plan_id:plan.id,razorpay_subscription_id:'sub_test',status:paid?'active':'created',quantity:team?3:1,scheduled_quantity:null,paid_until:paid?future:null,cancel_at_period_end:false,payment_method:state==='seat-upi'?'upi':state==='seat-unknown'?null:'card',plan:{name:plan.name,period:plan.period,amount_paise:plan.amountPaise,charge_amount_paise:plan.chargeAmountPaise}};
+  const subscription={id:'local',account_id:accountId,plan_id:plan.id,razorpay_subscription_id:'sub_test',status:state==='superseded'?'superseded':paid?'active':'created',quantity:team?3:1,scheduled_quantity:null,paid_until:paid?future:null,cancel_at_period_end:false,payment_method:state==='seat-upi'?'upi':state==='seat-unknown'?null:'card',plan:{name:plan.name,period:plan.period,amount_paise:plan.amountPaise,charge_amount_paise:plan.chargeAmountPaise}};
   const seat={id:'seat-test',account_id:accountId,email:'qa@example.test',hasLicense:true,licenseId:'license-test',licenseStatus:'active',expiresAt:future};
   let openAvailable=serverOpen && state!=='server-conflict';
-  let started=serverOpen || ['late-created','uncertain'].includes(state),oldConnected=true,desktopStatus='pending';
+  let started=state==='superseded' || serverOpen || ['late-created','uncertain'].includes(state),oldConnected=true,desktopStatus='pending';
   const openCheckout=()=>({id:'local',subscriptionId:'sub_test',requestId,accountId,planId:personal.id,planName:'Morrow Personal monthly',period:'monthly',quantity:1,couponCode:'INTRO',paymentMethod:'upi',trial:false,amountPaise:11801,currency:'INR',keyId:'rzp_test_fixture',expiresAt:state==='server-expired'?recent:future,resumable:state!=='server-expired'});
   const snapshot=()=>({openCheckouts:openAvailable?[openCheckout()]:[],accounts:team?[account,{...account,id:'personal-account',kind:'personal',name:'Personal account'}]:[account],subscriptions:paid||started?[subscription]:[],seats:paid?[seat]:[],payments:state==='uncertain'?[{id:'payment',subscription_id:'local',razorpay_payment_id:'pay_test',status:'captured',amount_paise:11801,currency:'INR',paid_at:recent}]:[],trial:{enabled:expiring,eligible:expiring,days:7}});
   const reply=method=>({subscriptionId:'sub_test',keyId:'rzp_test_fixture',email:'qa@example.test',name:'QA',paymentMethod:method,amountPaise:11801,chargeAmountPaise:11801,trialEndsAt:null,trialAuthorizationExpiresAt:null});
@@ -63,8 +63,11 @@ try {
    window.qaOpens=[];window.Razorpay=class {constructor(options){this.options=options;}on(name,fn){if(name==='payment.failed')this.failed=fn;}open(){window.qaOpens.push(this.options.subscription_id);window.qaMethod=this.options.config.display.blocks.selected.instruments[0].method;if(state==='failed')this.failed({error:{description:'Your bank declined this payment.'}});setTimeout(()=>this.options.modal.ondismiss(),0);}};
   },{state});
   if(['late-created','uncertain'].includes(state))await page.addInitScript(({accountId,requestId,reply})=>sessionStorage.setItem(`morrow:payment-pending:qa-user:${accountId}`,JSON.stringify({desktopRequest:'',subscriptionId:'sub_test',requestId,userId:'qa-user',startedAt:Date.now()-610000,expiresAt:Date.now()-1000,checkout:{reply,preparedAt:Date.now()-610000}})),{accountId,requestId,reply:reply('upi')});
-  await page.goto(`${origin}/subscribe?qa=round5${paid&&state!=='replace-code'?'&view=subscription':''}${state==='replace-code'?'&desktop='+requestId:''}`,{waitUntil:'networkidle'});
-  if(state==='replace-code') {
+  await page.goto(`${origin}/subscribe?qa=round5${(paid&&state!=='replace-code')||state==='superseded'?'&view=subscription':''}${state==='replace-code'?'&desktop='+requestId:''}`,{waitUntil:'networkidle'});
+  if(state==='superseded') {
+   await page.getByText('Closed',{exact:true}).waitFor();await page.getByText('This checkout was replaced by a newer one.',{exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'Resume',exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Change plan',exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:'Cancel existing renewal',exact:true}).count(),0);
+  } else if(state==='replace-code') {
    await page.getByRole('heading',{name:'Connect this Mac?',exact:true}).waitFor();
    const boxes=page.getByRole('textbox',{name:/Code character/});
    const paste=async text=>boxes.nth(0).evaluate((el,text)=>{const clipboardData=new DataTransfer();clipboardData.setData('text/plain',text);el.dispatchEvent(new ClipboardEvent('paste',{clipboardData,bubbles:true,cancelable:true}));},text);
@@ -101,10 +104,11 @@ try {
    }
    if(state==='server-expired'){assert.equal(await panel.getByRole('button',{name:'Resume',exact:true}).count(),0);assert.ok((await panel.innerText()).includes('expired at Razorpay'));}
   } else if(expiring) {
-   await page.clock.install();
    await page.getByRole('button',{name:'Review free trial',exact:true}).click();
    await page.getByRole('heading',{name:'Finishing up your last checkout…',exact:true}).waitFor();
-   if(state==='finishing-timeout'){await page.clock.fastForward(91000);await page.getByRole('button',{name:'Retry',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Retry',exact:true}).isEnabled(),true);}
+   await page.getByRole('button',{name:'Retry',exact:true}).waitFor();
+   if(state==='finishing-retry'){await page.getByRole('button',{name:'Retry',exact:true}).click();await page.getByRole('button',{name:'Retry',exact:true}).waitFor();}
+   assert.equal(calls.filter(body=>body.action==='checkout').length,state==='finishing-retry'?2:1);assert.equal(calls.some(body=>body.action==='checkout_status'),false);
    assert.deepEqual(await page.evaluate(()=>window.qaOpens),[]);assert.equal(calls.some(body=>body.action==='abandon_checkout'),false);
   } else {
    await page.getByRole('button',{name:'Subscribe',exact:true}).waitFor();

@@ -25,10 +25,11 @@ import { abandonCheckout, type CheckoutRecoveryState } from "@/lib/checkout-reco
 import { checkoutMethods, checkoutMethodConfig } from "@/lib/checkout-method";
 import { loadCheckoutQuote, assertCheckoutPrice, type CheckoutQuote } from "@/lib/checkout-quote";
 import { seatQuantityForQuote } from "@/lib/seat-quote-limit";
-import { waitForCheckout, type CheckoutExpiryState } from "@/lib/checkout-expiring";
+import { requestCheckoutOnce, type CheckoutExpiryState } from "@/lib/checkout-expiring";
 import { CheckoutExpiring } from "./CheckoutExpiring";
 import { selectOpenCheckout, openCheckoutReceipt, changeOpenCheckout } from "@/lib/open-checkout";
 import { OpenCheckoutPanel } from "./OpenCheckoutPanel";
+import { subscriptionStatusLabel } from "@/lib/subscription-label";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -414,7 +415,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     subscription.account_id === selectedAccountId), [snapshot, selectedAccountId]);
   const subscriptionNeedsRecovery = Boolean(currentSubscription && ["pending", "halted", "paused"].includes(currentSubscription.status));
   const matchingAccount = selectedAccount?.kind === audience;
-  const hasPaidAccess = Boolean(currentSubscription?.paid_until && new Date(currentSubscription.paid_until).getTime() > clock);
+  const hasPaidAccess = Boolean(currentSubscription?.status !== "superseded" && currentSubscription?.paid_until && new Date(currentSubscription.paid_until).getTime() > clock);
   useEffect(() => {
     if (!signedIn || !matchingAccount || !quotePlan || (hasPaidAccess && (!manageAccount || audience !== "company" || !currentSubscription || quantityChangeEligibility(currentSubscription) !== "allowed")) || (pendingReceipt.current && !openCheckout) || appliedCoupon?.duration === "fixed" || (couponCode.trim() && !appliedCoupon)) return;
     let invoiceProfile;
@@ -549,55 +550,51 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     }
     if (!result) {
       if (!activePlan) throw new Error("Choose a published plan first.");
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const requestId = expiringRequest.current?.context === checkoutContext ? expiringRequest.current.requestId : crypto.randomUUID(); checkoutRequestId = requestId;
-          expiringRequest.current = {context:checkoutContext,requestId};
-          const body = {
-            action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
-            quantity: audience === "company" ? seats : 1, requestId, trial: trialEligible, desktopRequestId: desktopRequest || undefined, couponCode: appliedCoupon?.code, inviteCode,
-            paymentMethod: couponPaymentMethod,
-          };
-          const current = () => checkoutUser === activeUserId.current && selectedAccount.id === selectedAccountRef.current
-            && expiringRequest.current?.requestId === requestId && expiringRequest.current.context === checkoutContext;
-          const response = await waitForCheckout(async () => {
-            const token = await authToken();
-            if (!current()) return null;
-            return billingRequest<unknown>("billing-customer", body, token);
-          }, current, setCheckoutExpiry);
-          if (response === null) return;
-          setCheckoutExpiry(null); expiringRequest.current = null;
-          result = parseCheckoutReply(response);
-          break;
-        } catch (caught) {
-          if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
-          setCheckoutExpiry(null);
-          if (caught instanceof BillingError && caught.code === "OPEN_CHECKOUT" && caught.openCheckout?.accountId === selectedAccount.id) {
-            setConflictingCheckout(caught.openCheckout); setPaymentPending(false); setCheckoutRecovery(null);
-            return;
-          }
-          if (caught instanceof BillingError && caught.code === "TRIAL_ALREADY_ACTIVE") {
-            setCheckoutExpiry(null); expiringRequest.current = null; setPreparedCheckout(null);
-            await refresh();
-            return;
-          }
-          if (caught instanceof BillingError && caught.code === "BILLING_STATE_REQUIRED") {
-            setPreparedCheckout(null); document.getElementById("billing-state")?.focus();
-            throw new Error("Choose your state so we can prepare your GST invoice, then try checkout again.");
-          }
-          if (caught instanceof BillingError && caught.code === "TRIAL_CHECKOUT_EXPIRED") {
-            setPreparedCheckout(null);
-            expiringRequest.current = null;
-            if (attempt === 0) { setNotice("This checkout expired. Preparing a new checkout."); continue; }
-            throw new Error("This checkout expired again. Try again in a minute.");
-          }
-          if (caught instanceof BillingError && caught.code === "TRIAL_NOT_AVAILABLE") {
-            setTrialDeclined(true); setPreparedCheckout(null);
-            setNotice("This account cannot start another trial. You can subscribe to the plan below.");
-            return;
-          }
-          throw caught;
+      try {
+        const requestId = expiringRequest.current?.context === checkoutContext ? expiringRequest.current.requestId : crypto.randomUUID(); checkoutRequestId = requestId;
+        expiringRequest.current = {context:checkoutContext,requestId};
+        const body = {
+          action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
+          quantity: audience === "company" ? seats : 1, requestId, trial: trialEligible, desktopRequestId: desktopRequest || undefined, couponCode: appliedCoupon?.code, inviteCode,
+          paymentMethod: couponPaymentMethod,
+        };
+        const current = () => checkoutUser === activeUserId.current && selectedAccount.id === selectedAccountRef.current
+          && expiringRequest.current?.requestId === requestId && expiringRequest.current.context === checkoutContext;
+        const response = await requestCheckoutOnce(async () => {
+          const token = await authToken();
+          if (!current()) return null;
+          return billingRequest<unknown>("billing-customer", body, token);
+        }, current, setCheckoutExpiry);
+        if (response === null) return;
+        setCheckoutExpiry(null); expiringRequest.current = null;
+        result = parseCheckoutReply(response);
+      } catch (caught) {
+        if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
+        setCheckoutExpiry(null);
+        if (caught instanceof BillingError && caught.code === "OPEN_CHECKOUT" && caught.openCheckout?.accountId === selectedAccount.id) {
+          setConflictingCheckout(caught.openCheckout); setPaymentPending(false); setCheckoutRecovery(null);
+          return;
         }
+        if (caught instanceof BillingError && caught.code === "TRIAL_ALREADY_ACTIVE") {
+          setCheckoutExpiry(null); expiringRequest.current = null; setPreparedCheckout(null);
+          await refresh();
+          return;
+        }
+        if (caught instanceof BillingError && caught.code === "BILLING_STATE_REQUIRED") {
+          setPreparedCheckout(null); document.getElementById("billing-state")?.focus();
+          throw new Error("Choose your state so we can prepare your GST invoice, then try checkout again.");
+        }
+        if (caught instanceof BillingError && caught.code === "TRIAL_CHECKOUT_EXPIRED") {
+          setPreparedCheckout(null);
+          expiringRequest.current = null;
+          throw new Error("This checkout expired. Retry to request a new checkout.");
+        }
+        if (caught instanceof BillingError && caught.code === "TRIAL_NOT_AVAILABLE") {
+          setTrialDeclined(true); setPreparedCheckout(null);
+          setNotice("This account cannot start another trial. You can subscribe to the plan below.");
+          return;
+        }
+        throw caught;
       }
       if (!result || checkoutUser !== activeUserId.current) return;
       setPreparedCheckout({ reply: result, context: checkoutContext, preparedAt: Date.now(), requestId: checkoutRequestId });
@@ -985,7 +982,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       onResume={() => startCheckout(true, openCheckout)} onChangePlan={changeServerCheckoutPlan} />}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
       {checkoutExpiry && <CheckoutExpiring state={checkoutExpiry} busy={Boolean(busy)} onRetry={() => startCheckout()} />}
-      {checkoutRecovery && !openCheckout && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
+      {checkoutRecovery && !openCheckout && !snapshot?.subscriptions.some(item => item.status === "superseded" && (item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId || item.id === pendingReceipt.current?.subscriptionId)) && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
         canResume={Boolean(pendingReceipt.current?.checkout && pendingReceipt.current.checkout.priceConfirmed !== false && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId && item.status === "created") && !trialAuthorizationExpired(pendingReceipt.current.checkout.reply, pendingReceipt.current.checkout.preparedAt, clock))}
         onResume={() => startCheckout(true)} onChangePlan={changeCheckoutPlan} onRefresh={refreshAccess} />}
       <h1 id="plan-title">{trialEligible ? `Start your ${snapshot?.trial?.days || trialConfig.days}-day free trial.` : "Subscribe to Morrow."}</h1>
@@ -1042,7 +1039,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         </label>
         <p className={styles.finePrint}>We need your state for the GST invoice.</p>
         <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || (appliedCoupon?.duration !== "fixed" && (!serverQuote || !availablePaymentMethods.includes(couponPaymentMethod))) || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
-          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> {checkoutExpiry === "waiting" ? "Checking last checkout…" : "Opening checkout…"}</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
+          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
         <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? serverQuote ? `${rupees(prepared?.amountPaise ?? totalCharge)} first payment, then ${rupees(serverQuote.renewalAmountPaise)} per ${renewalPeriod}.` : "Wait for your confirmed quote before paying." : serverQuote ? `${rupees(prepared?.amountPaise ?? totalCharge)} including GST per ${renewalPeriod}. Cancel renewal anytime.` : "Wait for your confirmed quote before paying."}</p>
         <p className={styles.finePrint}>By continuing, you agree to the <a href="/terms">Terms</a>.</p>
@@ -1081,7 +1078,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
       </select></label>}
       <div className={styles.accountSummary}>
-        <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><div className={styles.planControls}><span className={styles.statusPill}>{currentSubscription?.status === "trialing" ? "Trial" : currentSubscription?.status === "trial_canceled" || currentSubscription?.cancel_at_period_end || currentSubscription?.status === "cancelled" ? "Canceled" : currentSubscription && ["halted", "pending", "paused"].includes(currentSubscription.status) ? currentSubscription.status === "pending" ? "Retrying payment" : currentSubscription.status === "halted" ? "Payments stopped" : "Paused" : hasPaidAccess ? "Active" : currentSubscription ? "Expired" : "Not subscribed"}</span><button className={styles.iconButton} aria-label="Refresh subscription" title="Refresh subscription" onClick={refreshAccess} disabled={Boolean(busy)}><ArrowClockwise className={busy === "refresh" ? styles.spin : undefined} size={18} /></button></div></div>
+        <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><div className={styles.planControls}><span className={styles.statusPill}>{subscriptionStatusLabel(currentSubscription, hasPaidAccess)}</span><button className={styles.iconButton} aria-label="Refresh subscription" title="Refresh subscription" onClick={refreshAccess} disabled={Boolean(busy)}><ArrowClockwise className={busy === "refresh" ? styles.spin : undefined} size={18} /></button></div></div>
         {subscriptionNeedsRecovery && currentSubscription && <SubscriptionRecoveryGuidance status={currentSubscription.status} hasPaidAccess={hasPaidAccess} />}
         {hasPaidAccess && currentSubscription ? <>
           <p>{currentSubscription.status === "trial_canceled" ? `Trial canceled. Access until ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. You won't be charged.` : currentSubscription.status === "trialing" ? `${Math.max(0, Math.ceil((Date.parse(currentSubscription.trial_ends_at || currentSubscription.paid_until!) - clock) / 86400000))} days left · first charge on ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : currentSubscription.access_source === "admin_coupon" ? "Complimentary access" : `Billed ${currentSubscription.plan.period}. Your exact charges are shown on your payment receipts.`}</p>
@@ -1093,7 +1090,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
               <div className={styles.inputRow}><button onClick={() => { setConfirmCancel(false); setCancelRetryId(null); setError(""); }} disabled={Boolean(busy)}>Keep subscription</button><button onClick={() => changeSubscription("cancel", currentSubscription)} disabled={Boolean(busy)}>{busy === "cancel" ? "Cancelling…" : cancelRetryId === currentSubscription.id ? "Retry cancellation" : currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel renewal"}</button></div>
             </div>}
           </>}
-        </> : <>{currentSubscription?.paid_until && <p role="status">{currentSubscription.trial_ends_at ? "Your trial has ended" : "Your paid access ended"} on {day(currentSubscription.paid_until)}. {subscriptionNeedsRecovery ? "Recover your existing subscription to use Morrow." : "Renew to use Morrow."} Your files and payment history remain available.</p>}{currentSubscription?.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && !["trial_canceled","cancelled","expired","completed"].includes(currentSubscription.status) && <button className={styles.quietButton} disabled={Boolean(busy)} onClick={() => changeSubscription("cancel", currentSubscription)}>{cancelRetryId === currentSubscription.id ? "Retry cancellation" : "Cancel existing renewal"}</button>}{!subscriptionNeedsRecovery && <><p>{snapshot?.betaInviteRequired ? "Enter your invitation to choose a plan." : "Choose a plan to start using Morrow."}</p><button className={styles.primary} onClick={() => setManageAccount(false)}>{snapshot?.betaInviteRequired ? "Enter invite code" : "Choose a plan"} <ArrowRight /></button></>}</>}
+        </> : <>{currentSubscription?.status === "superseded" && <p role="status">This checkout was replaced by a newer one.</p>}{currentSubscription?.status !== "superseded" && currentSubscription?.paid_until && <p role="status">{currentSubscription.trial_ends_at ? "Your trial has ended" : "Your paid access ended"} on {day(currentSubscription.paid_until)}. {subscriptionNeedsRecovery ? "Recover your existing subscription to use Morrow." : "Renew to use Morrow."} Your files and payment history remain available.</p>}{currentSubscription?.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && !["trial_canceled","cancelled","expired","completed","superseded"].includes(currentSubscription.status) && <button className={styles.quietButton} disabled={Boolean(busy)} onClick={() => changeSubscription("cancel", currentSubscription)}>{cancelRetryId === currentSubscription.id ? "Retry cancellation" : "Cancel existing renewal"}</button>}{!subscriptionNeedsRecovery && <><p>{snapshot?.betaInviteRequired ? "Enter your invitation to choose a plan." : "Choose a plan to start using Morrow."}</p><button className={styles.primary} onClick={() => setManageAccount(false)}>{snapshot?.betaInviteRequired ? "Enter invite code" : "Choose a plan"} <ArrowRight /></button></>}</>}
       </div>
       {selectedAccount?.kind === "company" && <details className={styles.management}><summary>Manage team seats</summary>
         <form onSubmit={assignSeat}><label className={styles.field}>Email<input type="email" value={seatEmail} onChange={(event) => setSeatEmail(event.target.value)} placeholder="name@company.com" required /></label><button disabled={Boolean(busy) || !hasPaidAccess}>Assign seat</button></form>

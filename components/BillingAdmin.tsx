@@ -251,13 +251,13 @@ export function BillingAdmin({ token }: { token: string }) {
       {tab === "customers" && <div className={styles.ledger}><div className={styles.tableHead}><h3>Customers and seats</h3><span>{snapshot.accounts.length} accounts</span></div>
         {snapshot.accounts.map((account) => {
           const subs = snapshot.subscriptions.filter((item) => item.account_id === account.id);
-          const current = subs.find((item) => !["cancelled", "completed", "expired"].includes(item.status)) || subs[0];
+          const current = subs.find((item) => !["cancelled", "completed", "expired", "superseded"].includes(item.status)) || subs[0];
           const assigned = snapshot.seats.filter((item) => item.account_id === account.id);
           return <div className={styles.customer} key={account.id}><div><strong>{account.name}</strong><span>{account.billing_email}</span><small>{account.kind} · joined {date(account.created_at)}</small></div>
             <div><strong>{assigned.length} assigned</strong><span>{current?.quantity || 0} purchased seats</span></div>
             <div><strong>{current?.status || "No subscription"}</strong><span>Paid through {date(current?.paid_until || null)}</span>
               {current?.cancel_at_period_end && <small>Renewal cancelled</small>}
-              {snapshot.role === "owner" && current && !current.cancel_at_period_end && !["cancelled", "completed", "expired"].includes(current.status) &&
+              {snapshot.role === "owner" && current && !current.cancel_at_period_end && !["cancelled", "completed", "expired", "superseded"].includes(current.status) &&
                 <button type="button" disabled={Boolean(busy)} onClick={() => cancelCustomer(current, account.name)}>Cancel renewal</button>}
             </div></div>;
         })}

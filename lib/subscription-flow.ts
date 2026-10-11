@@ -27,9 +27,9 @@ export function subscriptionStage(input: {
 export function currentSubscriptionForAccount(snapshot: BillingSnapshot | null, accountId: string, now = Date.now()) {
   const subscriptions = (snapshot?.subscriptions || []).filter((item) => item.account_id === accountId);
   // A later, abandoned checkout must not hide an already paid subscription.
-  return subscriptions.filter((item) => item.paid_until && Date.parse(item.paid_until) > now)
+  return subscriptions.filter((item) => item.status !== "superseded" && item.paid_until && Date.parse(item.paid_until) > now)
     .sort((a, b) => Date.parse(b.paid_until!) - Date.parse(a.paid_until!))[0]
-    || subscriptions.find((item) => !["cancelled", "expired", "completed"].includes(item.status))
+    || subscriptions.find((item) => !["cancelled", "expired", "completed", "superseded"].includes(item.status))
     || subscriptions[0];
 }
 
@@ -42,9 +42,10 @@ export function trialAuthorizationExpired(reply: CheckoutReply, preparedAt: numb
 
 export const PAYMENT_CONFIRMATION_TIMEOUT_MS = 10 * 60_000;
 export function pendingPaymentOutcome(snapshot: BillingSnapshot | null | undefined, accountId: string, receipt: PendingPayment, hasAccess: boolean, now = Date.now()): "ready" | "waiting" | "failed" | "uncertain" | "closed" {
-  if (hasAccess && !receipt.userId) return "ready";
   const subscription = snapshot?.subscriptions.find(item => item.account_id === accountId &&
     (item.razorpay_subscription_id === receipt.subscriptionId || item.id === receipt.subscriptionId));
+  if (subscription?.status === "superseded") return "failed";
+  if (hasAccess && !receipt.userId) return "ready";
   if (receipt.userId) {
     // Access from another subscription is not evidence about this checkout.
     if (subscription && hasAccess && subscription.paid_until && Date.parse(subscription.paid_until) > now) return "ready";

@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
 import {openCheckoutReceipt} from '../lib/open-checkout';
-import {waitForCheckout} from '../lib/checkout-expiring';
+import {requestCheckoutOnce} from '../lib/checkout-expiring';
 import {assertCheckoutPrice} from '../lib/checkout-quote';
 import {checkoutMethods,checkoutMethodConfig} from '../lib/checkout-method';
 import { invoiceProfileForCheckout, invoiceRecipientNameForCheckout } from '../lib/invoice-profile';
@@ -23,7 +23,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
   let pending: Promise<void>;
   const open = vi.fn();
   const bindings = {
-    openCheckoutReceipt, setConflictingCheckout:vi.fn(), waitForCheckout, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
+    openCheckoutReceipt, setConflictingCheckout:vi.fn(), requestCheckoutOnce, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
     pendingReceipt: {current:null}, pendingCheck: {current:vi.fn()}, checkoutFailure:{current:""}, setCheckoutRecovery:vi.fn(), setPaymentPending:vi.fn(),
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
@@ -113,25 +113,16 @@ describe('trial authorization deadline', () => {
     expect(flow.open).toHaveBeenCalledOnce();
     expect(flow.billingRequest.mock.calls.filter(([, body]) => body.action === 'checkout')).toHaveLength(0);
   });
-  it('retries TRIAL_CHECKOUT_EXPIRED once with a fresh request id', async () => {
-    const flow = checkoutFlow(reply(), 0);
-    flow.billingRequest.mockImplementation(async (_endpoint, body) => {
-      if (body.action !== 'checkout') return {};
-      if (flow.billingRequest.mock.calls.filter(([, item]) => item.action === 'checkout').length === 1) throw new BillingError('Expired', 'TRIAL_CHECKOUT_EXPIRED');
-      return reply();
-    });
-    await flow.start();
-    const requests = flow.billingRequest.mock.calls.filter(([, body]) => body.action === 'checkout');
-    expect(requests).toHaveLength(2);
-    expect(requests[0][1].requestId).not.toEqual(requests[1][1].requestId);
-    expect(flow.open).not.toHaveBeenCalled();
+  it('does not automatically retry a legacy expired checkout', async () => {
+    const flow=checkoutFlow(reply(),0,{billingRequest:vi.fn(async(_endpoint,body)=>{if(body.action==='checkout')throw new BillingError('Expired','TRIAL_CHECKOUT_EXPIRED');return {};})});
+    await expect(flow.start()).rejects.toThrow('expired');expect(flow.billingRequest.mock.calls.filter(([,body])=>body.action==='checkout')).toHaveLength(1);expect(flow.open).not.toHaveBeenCalled();
   });
   it('does not retry indefinitely or replay ambiguous failures', async () => {
     for (const error of [new BillingError('Expired', 'TRIAL_CHECKOUT_EXPIRED'), new Error('Offline')]) {
       const flow = checkoutFlow(reply(), 0);
       flow.billingRequest.mockImplementation(async (_endpoint, body) => { if (body.action === 'checkout') throw error; return {}; });
-      await expect(flow.start()).rejects.toThrow(error instanceof BillingError ? 'expired again' : 'Offline');
-      expect(flow.billingRequest.mock.calls.filter(([, body]) => body.action === 'checkout')).toHaveLength(error instanceof BillingError ? 2 : 1);
+      await expect(flow.start()).rejects.toThrow(error instanceof BillingError ? 'expired' : 'Offline');
+      expect(flow.billingRequest.mock.calls.filter(([, body]) => body.action === 'checkout')).toHaveLength(1);
       expect(flow.open).not.toHaveBeenCalled();
     }
   });
@@ -258,13 +249,12 @@ it('RACE-03b refreshes the snapshot instead of opening or cancelling an already 
  const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest});await flow.start();expect(flow.refresh).toHaveBeenCalledOnce();expect(flow.open).not.toHaveBeenCalled();expect(billingRequest.mock.calls.some(([,body])=>body.action==='abandon_checkout')).toBe(false);
 });
 
-it('RACE-03b keeps the request identity through 90 seconds and a manual Retry',async()=>{
- vi.useFakeTimers();
- try {
+it('RACE-03b manual Retry makes one checkout call with the same request and no status poll',async()=>{
+ vi.useFakeTimers();try {
   const requests:object[]=[];const billingRequest=vi.fn(async(_endpoint,body)=>{if(body.action==='checkout'){requests.push(body);throw new BillingError('Expiring','CHECKOUT_EXPIRING',5);}return {};});
-  const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest});const first=flow.start();await vi.advanceTimersByTimeAsync(90000);await first;expect(flow.setCheckoutExpiry).toHaveBeenLastCalledWith('timeout');expect(flow.open).not.toHaveBeenCalled();
-  billingRequest.mockImplementation(async(_endpoint,body)=>{if(body.action==='checkout'){requests.push(body);return reply();}return {};});await flow.start();expect(requests).toHaveLength(19);expect(requests.every(body=>JSON.stringify(body)===JSON.stringify(requests[0]))).toBe(true);expect(flow.setPreparedCheckout.mock.lastCall?.[0]).toMatchObject({reply:{subscriptionId:'sub-new'}});expect(flow.open).not.toHaveBeenCalled();
- } finally {vi.useRealTimers();}
+  const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest});await flow.start();expect(flow.setCheckoutExpiry).toHaveBeenLastCalledWith('retry');expect(vi.getTimerCount()).toBe(0);await vi.advanceTimersByTimeAsync(3600000);expect(requests).toHaveLength(1);
+  billingRequest.mockImplementation(async(_endpoint,body)=>{if(body.action==='checkout'){requests.push(body);return reply();}return {};});await flow.start();expect(requests).toHaveLength(2);expect(requests[1]).toEqual(requests[0]);expect(billingRequest.mock.calls.some(([,body])=>body.action==='checkout_status')).toBe(false);expect(flow.setPreparedCheckout.mock.lastCall?.[0]).toMatchObject({reply:{subscriptionId:'sub-new'}});
+ }finally{vi.useRealTimers();}
 });
 
 const serverOpen = {id:'local',subscriptionId:'sub_server',requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',accountId:'account',planId:'monthly',planName:'Personal',period:'monthly' as const,quantity:1,couponCode:'INTRO',paymentMethod:'upi' as const,trial:false,amountPaise:11800,currency:'INR' as const,keyId:'rzp_test_fixture',expiresAt:new Date(now+3600000).toISOString(),resumable:true};
