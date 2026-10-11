@@ -39,6 +39,8 @@ try{
     let result;
     if(url.pathname.endsWith('/billing-catalog'))result={mode:'test',plans:[plan],trial:{enabled:false,days:7}};
     else if(body.action==='snapshot')result={accounts:[account],subscriptions:recipient?[]:[subscription],seats:[],payments:[],trial:{enabled:false,days:7}};
+    else if(body.action==='save_invoice_profile')result={saved:true};
+    else if(body.action==='quote_checkout')result={amountPaise:11800,chargeAmountPaise:11800,renewalAmountPaise:11800,baseAmountPaise:10000,gstAmountPaise:1800,currency:'INR',quantity:body.quantity,period:'monthly',duration:'recurring',merchantPromotion:false,maximumQuantity:100};
     else if(body.action==='devices')result={devices:[]};
     else if(body.action==='invoices')result={invoices,receipts,receiptsStatus:state==='receipts-unavailable'?'unavailable':'available'};
     else throw new Error('Unstubbed GST action '+body.action);
@@ -54,7 +56,7 @@ try{
     assert.equal(await input.inputValue(),'अनन्या शर्मा');
     await input.fill('');assert.equal(await button.isEnabled(),false);
     await input.fill('A');assert.equal(await button.isEnabled(),false);
-    await input.fill('अनन्या शर्मा');assert.equal(await button.isEnabled(),true);
+    await input.fill('अनन्या शर्मा');await page.waitForFunction(()=>document.querySelector('button[class*="primary"]')?.disabled===false);assert.equal(await button.isEnabled(),true);
     assert.equal(await input.getAttribute('maxlength'),'160');
    }
    else {await page.getByText('Business invoice (optional)',{exact:true}).click();assert.equal(await page.getByLabel('Registered business name').inputValue(),'Morrow QA Private Limited');assert.equal(await page.getByLabel('Your name',{exact:true}).count(),0);}

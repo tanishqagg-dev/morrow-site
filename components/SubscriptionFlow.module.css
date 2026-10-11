@@ -40,3 +40,10 @@
 @media(max-width:700px) { .documentRow { flex-direction: column; gap: 12px; } }
 
 .planFieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+
+.checkoutRecovery { margin: 0 0 32px; }
+.checkoutActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+.checkoutActions button { flex: 1; width: auto; min-height: 48px; justify-content: center; }
+.checkoutRecovery .primary { background: #111; color: #fff; border-color: #111; }
+.checkoutRecovery .primary:not(:disabled):hover { background: #333; }
+@media (max-width: 600px) { .checkoutActions { flex-direction: column; } }

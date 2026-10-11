@@ -39,7 +39,8 @@ try {
     else if(body.action==='approve_desktop'){assert.equal(body.userCode,'K7M4QX');requestStatus='approved';payload={approved:true};}
     else if(body.action==='save_invoice_recipient_name'){assert.equal(body.name,'QA Buyer');payload={saved:true};}
     else if(body.action==='save_invoice_profile'){assert.equal(body.invoiceProfile.kind,'consumer');payload={saved:true};}
-    else if(body.action==='checkout')payload={subscriptionId:'sub_test',keyId:'rzp_test_fixture',email:'qa@example.test',name:'QA',trialEndsAt:null,trialAuthorizationExpiresAt:null};
+    else if(body.action==='quote_checkout')payload={amountPaise:353882,chargeAmountPaise:353882,renewalAmountPaise:353882,baseAmountPaise:299900,gstAmountPaise:53982,currency:'INR',quantity:1,period:'monthly',duration:'recurring',merchantPromotion:false,maximumQuantity:100};
+    else if(body.action==='checkout')payload={amountPaise:353882,paymentMethod:body.paymentMethod,subscriptionId:'sub_test',keyId:'rzp_test_fixture',email:'qa@example.test',name:'QA',trialEndsAt:null,trialAuthorizationExpiresAt:null};
     else if(body.action==='invoices')payload={invoices:[],receipts:[],receiptsStatus:'available'};
     else throw new Error('Unstubbed action '+body.action);
     return route.fulfill({status:200,headers:{'access-control-allow-origin':origin},contentType:'application/json',body:JSON.stringify(payload)});
