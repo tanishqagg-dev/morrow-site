@@ -1,4 +1,5 @@
 import { licensingFunctionsBase } from "./supabase-browser";
+import type { InvoiceProfile } from "./invoice-profile";
 import { z } from "zod";
 
 export type BillingPlan = {
@@ -43,7 +44,7 @@ export function parsePendingPayment(value: unknown): PendingPayment | null {
 
 export type BillingAccount = {
   id: string; kind: "personal" | "company"; name: string; billing_email: string;
-  owner_user_id: string; created_at: string;
+  owner_user_id: string; created_at: string; invoice_profile?: InvoiceProfile | null;
 };
 
 const subscriptionStatusSchema = z.enum(["creating", "created", "authenticated", "active", "pending", "halted", "paused", "cancelled", "completed", "expired", "trialing", "trial_canceled", "unknown"]).catch("unknown");

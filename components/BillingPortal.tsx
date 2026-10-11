@@ -10,6 +10,7 @@ import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
+import { gstStates, invoiceFormFromProfile, invoiceProfileForCheckout } from "@/lib/invoice-profile";
 import { pollDesktopCompletion } from "@/lib/desktop-completion";
 import { revokeConnectedMac, signOutEverywhere, type ConnectedMac } from "@/lib/connected-macs";
 import { clearDesktopRequest, resolveDesktopRequest, type StoredDesktopRequest } from "@/lib/desktop-storage";
@@ -371,6 +372,13 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const monthlyEquivalent = period === "yearly" ? totalCharge / 12 : totalCharge;
   const accounts = snapshot?.accounts || [];
   const selectedAccount: BillingAccount | undefined = accounts.find((account) => account.id === selectedAccountId);
+  const invoicePrefilledAccount = useRef("");
+  useEffect(() => {
+    if (!selectedAccount || invoicePrefilledAccount.current === selectedAccount.id) return;
+    invoicePrefilledAccount.current = selectedAccount.id;
+    const form = invoiceFormFromProfile(selectedAccount?.invoice_profile);
+    setBusinessInvoice(form.businessInvoice); setInvoiceDetails(form.details); setPreparedCheckout(null);
+  }, [selectedAccount]);
   useEffect(() => { if (selectedAccount) setAudience(selectedAccount.kind); }, [selectedAccount?.kind]);
   const subscriptions = useMemo(() => (snapshot?.subscriptions || []).filter((subscription) =>
     subscription.account_id === selectedAccountId), [snapshot, selectedAccountId]);
@@ -440,7 +448,17 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     void run("checkout", async () => {
     if (!signedIn || !selectedAccount) throw new Error("Your account is still loading. Please try again.");
     const checkoutUser = activeUserId.current;
-    await billingRequest("billing-customer", {action:"save_invoice_profile",accountId:selectedAccount.id,invoiceProfile:businessInvoice?invoiceDetails:null}, await authToken());
+    const invoiceProfile = invoiceProfileForCheckout(businessInvoice, invoiceDetails);
+    try {
+      await billingRequest("billing-customer", { action: "save_invoice_profile", accountId: selectedAccount.id, invoiceProfile }, await authToken());
+    } catch (caught) {
+      if (caught instanceof BillingError && caught.code === "BILLING_STATE_REQUIRED") {
+        setPreparedCheckout(null); document.getElementById("billing-state")?.focus();
+        throw new Error("Choose your state so we can prepare your GST invoice, then try checkout again.");
+      }
+      throw caught;
+    }
+    if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
     if (appliedCoupon?.duration === "fixed") {
       const redeemingUser = activeUserId.current;
       const result = await billingRequest<{ expiresAt: string }>("billing-customer", {
@@ -473,6 +491,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           }, await authToken()));
           break;
         } catch (caught) {
+          if (caught instanceof BillingError && caught.code === "BILLING_STATE_REQUIRED") {
+            setPreparedCheckout(null); document.getElementById("billing-state")?.focus();
+            throw new Error("Choose your state so we can prepare your GST invoice, then try checkout again.");
+          }
           if (caught instanceof BillingError && caught.code === "TRIAL_CHECKOUT_EXPIRED") {
             setPreparedCheckout(null);
             if (attempt === 0) { setNotice("This checkout expired. Preparing a new checkout."); continue; }
@@ -824,7 +846,15 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
             {(appliedCoupon.paymentMethods || ["upi"]).map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
           </select>
         </label>}
-        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || (!activePlan && appliedCoupon?.duration !== "fixed")}>
+        <label className={styles.field} htmlFor="billing-state">Your state
+          <select id="billing-state" aria-label="Your state" required value={invoiceDetails.stateCode} disabled={Boolean(busy) || checkoutOpen}
+            onChange={event => setInvoiceDetails({ ...invoiceDetails, stateCode: event.target.value })}>
+            <option value="">Choose your state</option>
+            {gstStates.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
+          </select>
+        </label>
+        <p className={styles.finePrint}>We need your state for the GST invoice.</p>
+        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || !invoiceDetails.stateCode || (!activePlan && appliedCoupon?.duration !== "fixed")}>
           {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
         <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
@@ -844,7 +874,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         <label><input type="checkbox" checked={businessInvoice} onChange={e=>setBusinessInvoice(e.target.checked)}/> Add my business GSTIN</label>
         {businessInvoice && <div className={styles.invoiceFields}>
           <label>Registered business name<input value={invoiceDetails.businessName} maxLength={160} onChange={e=>setInvoiceDetails({...invoiceDetails,businessName:e.target.value})}/></label>
-          <label>GSTIN<input value={invoiceDetails.gstin} maxLength={15} autoCapitalize="characters" onChange={e=>{const gstin=e.target.value.toUpperCase();setInvoiceDetails({...invoiceDetails,gstin,stateCode:gstin.slice(0,2)});}}/></label>
+          <label>GSTIN<input value={invoiceDetails.gstin} maxLength={15} autoCapitalize="characters" onChange={e=>{const gstin=e.target.value.toUpperCase();setInvoiceDetails({...invoiceDetails,gstin});}}/></label>
           <label>Registered billing address<textarea value={invoiceDetails.address} maxLength={500} onChange={e=>setInvoiceDetails({...invoiceDetails,address:e.target.value})}/></label>
           <label>PIN code<input value={invoiceDetails.postalCode} inputMode="numeric" maxLength={6} onChange={e=>setInvoiceDetails({...invoiceDetails,postalCode:e.target.value})}/></label>
           <p>{activePlan?.gstDiscountAvailable ? `With valid GSTIN details, Morrow funds a discount equal to the standard GST charge. Your total is ${rupees(activePlan.amountPaise)} per ${renewalPeriod}, including applicable GST. Coupons cannot be combined with this discount.` : "GST is included in the checkout total."} Your details go to our billing team for the GST invoice. A GSTIN does not guarantee input tax credit.</p>

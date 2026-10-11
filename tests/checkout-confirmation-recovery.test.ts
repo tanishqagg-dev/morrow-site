@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
+import { invoiceProfileForCheckout } from '../lib/invoice-profile';
 import { BillingError, parseCheckoutReply, parsePendingPayment, type BillingSnapshot } from '../lib/billing';
 import { trialAuthorizationExpired, pendingPaymentOutcome, PAYMENT_CONFIRMATION_TIMEOUT_MS, subscriptionStage } from '../lib/subscription-flow';
 const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
@@ -20,7 +21,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now) {
   const bindings = {
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
-    businessInvoice: false, invoiceDetails: {}, appliedCoupon: null, snapshot: { betaInviteRequired: false },
+    businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
     inviteAccepted: true, activePlan: { id: 'plan' }, audience: 'personal', seats: 1, period: 'monthly',
     couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
     prepared, preparedCheckout: { preparedAt }, trialAuthorizationExpired, parseCheckoutReply, BillingError,
