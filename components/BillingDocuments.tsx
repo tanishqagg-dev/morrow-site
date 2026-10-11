@@ -16,12 +16,12 @@ export function BillingDocuments({invoices,receipts,receiptsStatus,busy,loading,
     <button className={styles.quietButton} onClick={onReload} disabled={busy}>Refresh documents</button>
     {loading && <p role="status">Loading documents…</p>}
     {receiptsStatus === null ? !loading && <p>Documents have not loaded yet. Refresh the list to try again.</p> : <>
-      <section aria-label="GST tax invoices and credit notes">
-        <h3>GST tax invoices and credit notes</h3>
+      <section aria-label="Morrow GST tax invoices and credit notes">
+        <h3>Morrow GST tax invoices and credit notes</h3>
         {invoices.length === 0 && <p>No GST documents are available yet. Contact support if you need a document for an earlier payment.</p>}
         {invoices.map(document => <article className={styles.documentRow} key={document.id}>
           <div>
-            <h4>{document.kind === 'credit_note' ? 'Credit note' : 'GST tax invoice'}{document.status === 'issued' && document.number ? ` · ${document.number}` : ''}</h4>
+            <h4>{document.kind === 'credit_note' ? 'Credit note' : 'Tax invoice'}{document.status === 'issued' && document.number ? ` · ${document.number}` : ''}</h4>
             <p>{date(document.issuedOn)} · {rupees(document.amountPaise)}{document.kind === 'credit_note' ? ' reversed' : ''}</p>
             {document.kind === 'credit_note' && document.originalInvoiceNumber && <p>Reverses invoice {document.originalInvoiceNumber}</p>}
             <p className={styles.documentStatus}>{document.status === 'issued' ? 'Issued' : document.status === 'not_configured' ? 'Being prepared' : document.status === 'failed' ? 'Document could not be prepared' : 'Billing details needed'}</p>
@@ -39,7 +39,7 @@ export function BillingDocuments({invoices,receipts,receiptsStatus,busy,loading,
         {receiptsStatus === 'unavailable' && <p role="status">{receipts.length ? 'Some Razorpay receipts are unavailable right now.' : 'Razorpay receipts are unavailable right now.'} Your Morrow GST documents remain available here.</p>}
         {receipts.length === 0 && receiptsStatus === 'available' && <p>No Razorpay receipts yet.</p>}
         {receipts.map(receipt=><article className={styles.documentRow} key={receipt.id}>
-          <div><h4>Receipt{receipt.number ? ` · ${receipt.number}` : ''}</h4><p>{receipt.paidAt ? date(receipt.paidAt) : 'Payment date unavailable'} · {rupees(receipt.amountPaise)}</p><p className={styles.documentStatus}>{receipt.status}</p></div>
+          <div><h4>Payment receipt{receipt.number ? ` · ${receipt.number}` : ''}</h4><p>{receipt.paidAt ? date(receipt.paidAt) : 'Payment date unavailable'} · {rupees(receipt.amountPaise)}</p><p className={styles.documentStatus}>{receipt.status}</p></div>
           {receiptUrl(receipt.url) ? <a className={styles.quietButton} href={receiptUrl(receipt.url)!} target="_blank" rel="noopener noreferrer">View receipt</a> : <p>Receipt link unavailable</p>}
         </article>)}
       </section>

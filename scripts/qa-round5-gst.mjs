@@ -14,18 +14,19 @@ const invoice={id:'invoice-test',subscriptionId:'subscription-test',kind:'tax_in
 const credit={...invoice,id:'credit-test',kind:'credit_note',number:'MC2627/000000001',amountPaise:5900,amountInWords:'Fifty-nine rupees only',refundId:'refund_test',refundReason:'Partial refund',originalInvoiceNumber:invoice.number,originalInvoiceDate:invoice.issuedOn,taxableValuePaise:5000,cgstPaise:450,sgstPaise:450};
 const html='<!doctype html><html><head><meta charset="utf-8"><title>Test GST invoice</title><style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:24px}h1{font-size:28px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:12px;border-bottom:1px solid #ddd}@media print{body{margin:0}}</style></head><body><h1>GST tax invoice</h1><p>Test document</p><p>MI2627/000000001 · 11 October 2026</p><h2>अनन्या शर्मा</h2><p>Delhi (07)</p><table><tr><th>Description</th><th>Amount</th></tr><tr><td>Morrow Personal</td><td>₹118.00</td></tr><tr><td>Taxable value</td><td>₹100.00</td></tr><tr><td>CGST</td><td>₹9.00</td></tr><tr><td>SGST</td><td>₹9.00</td></tr></table></body></html>';
 try{
- for(const width of [1440,390])for(const state of ['issued-credit','not-configured','billing-details-required','receipts-unavailable','failed','empty',...(process.argv.includes('--recipients')?['recipient-consumer','recipient-business']:[])]){
+ for(const width of [1440,390])for(const state of ['issued-credit','not-configured','billing-details-required','receipts-unavailable','receipts-only','failed','empty',...(process.argv.includes('--recipients')?['recipient-consumer','recipient-business']:[])]){
   const context=await browser.newContext({viewport:{width,height:width===390?844:900},reducedMotion:'reduce'});
   const page=await context.newPage(),errors=[],actions=[];
   page.on('pageerror',error=>errors.push(error.message));
   const recipient=state.startsWith('recipient-');
   const account={id:'account-test',kind:'personal',name:'Personal account',billing_email:'qa@example.test',owner_user_id:'qa-user',created_at:now,invoice_recipient_name:'अनन्या शर्मा',invoice_profile:state==='recipient-business'?{kind:'business',stateCode:'07',businessName:'Morrow QA Private Limited',gstin:'07AAACM1234A1Z5',address:'Test address, Delhi',postalCode:'110001'}:{kind:'consumer',stateCode:'07'}};
   const subscription={id:invoice.subscriptionId,account_id:account.id,plan_id:plan.id,razorpay_subscription_id:'sub_test',status:'active',quantity:1,scheduled_quantity:null,paid_until:future,cancel_at_period_end:false,plan:{name:plan.name,period:'monthly',amount_paise:plan.amountPaise,charge_amount_paise:plan.chargeAmountPaise}};
-  let invoices=state==='issued-credit'?[invoice,credit]:state==='empty'?[]:[invoice];
+  let invoices=state==='issued-credit'?[invoice,credit]:['empty','receipts-only'].includes(state)?[]:[invoice];
   if(['not-configured','billing-details-required','failed'].includes(state))invoices=[{...invoice,status:state==='failed'?'failed':state==='not-configured'?'not_configured':'billing_details_required',errorCode:state==='failed'?'GST_DOCUMENT_FAILED':null,number:null,issuedAt:null,supplier:null,printable:false}];
-  const receipts=state==='receipts-unavailable'||state==='empty'?[]:[{id:'receipt-test',number:'RZP-test-1',status:'paid',amountPaise:11800,paidAt:now,url:'https://razorpay.example/receipt-test'}];
-  await page.route('**/*',async route=>{
+  const receipts=state==='receipts-only'?[{id:'inv_test',status:'paid',amountPaise:11800,url:'https://rzp.io/qa-receipt'}]:state==='receipts-unavailable'||state==='empty'?[]:[{id:'receipt-test',number:'RZP-test-1',status:'paid',amountPaise:11800,paidAt:now,url:'https://razorpay.example/receipt-test'}];
+  await context.route('**/*',async route=>{
    const request=route.request(),url=new URL(request.url());if(url.origin===origin)return route.continue();
+   if(url.href==='https://rzp.io/qa-receipt'){assert.equal(request.headers().authorization,undefined);return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html><body><h1>Test payment receipt</h1></body></html>'});}
    assert.ok(!url.search.includes('qa-session'));
    if(url.hostname==='abcdefghijklmnopqrst.supabase.co'&&url.pathname.startsWith('/functions/v1/')){
     const headers={'access-control-allow-origin':origin,'access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'};
@@ -60,8 +61,9 @@ try{
   }else{
    await page.getByRole('heading',{name:'Your subscription',exact:true}).waitFor();
    await page.getByText('Payments and invoices',{exact:true}).click();
-   await page.getByRole('heading',{name:'GST tax invoices and credit notes',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'Morrow GST tax invoices and credit notes',exact:true}).waitFor();
    if(['not-configured','billing-details-required','failed'].includes(state)){assert.equal(await page.getByRole('button',{name:'Print or save as PDF',exact:true}).count(),0);assert.equal(await page.getByText(invoice.number,{exact:false}).count(),0);}
+   if(state==='receipts-only'){await page.getByRole('heading',{name:'Payment receipt',exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Print or save as PDF',exact:true}).count(),0);}
    if(state==='issued-credit'){await page.getByText('₹59 reversed',{exact:false}).waitFor();assert.equal(await page.getByRole('button',{name:'Print or save as PDF',exact:true}).count(),2);}
    if(state==='receipts-unavailable')assert.equal(await page.getByRole('button',{name:'Print or save as PDF',exact:true}).count(),1);
   }
@@ -73,6 +75,7 @@ try{
    await popup.waitForURL('blob:**');await popup.getByRole('heading',{name:'अनन्या शर्मा',exact:true}).waitFor();assert.equal(await popup.evaluate(()=>window.opener),null);assert.equal(actions.filter(action=>action.format==='html').length,1);
    await popup.screenshot({path:`${output}gst-print-${width}.png`,fullPage:true});await popup.close();
   }
+  if(state==='receipts-only'){const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'View receipt',exact:true}).click();const popup=await popupPromise;await popup.getByRole('heading',{name:'Test payment receipt',exact:true}).waitFor();assert.equal(popup.url(),'https://rzp.io/qa-receipt');assert.equal(await popup.evaluate(()=>window.opener),null);await popup.close();}
   report.push({state,width,errors,overflow,actions});console.log(`GST ${state} ${width} OK`);await context.close();
  }
  await writeFile(`${output}gst-report.json`,JSON.stringify(report,null,2));

@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { BillingDocuments } from '../components/BillingDocuments';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -155,4 +158,13 @@ test('GST document loading includes ledger subscriptions and keeps receipt outag
  expect(flow.billingRequest).toHaveBeenCalledTimes(2);
  expect(flow.setReceipts).toHaveBeenCalledWith([{id:'gateway-receipt'}]);
  expect(flow.setReceiptsStatus).toHaveBeenCalledWith('unavailable');
+});
+
+test('BROWSER-02 loads and opens a payment receipt when the exact response has no tax invoices',async()=>{
+ const payload={invoices:[],receipts:[{id:'inv_test',status:'paid',amountPaise:11800,url:'https://rzp.io/qa-receipt'}],receiptsStatus:'available'};
+ const flow=invoiceFlow();flow.billingRequest.mockResolvedValue(payload);flow.load();
+ await vi.waitFor(()=>expect(flow.setReceipts).toHaveBeenCalledWith(payload.receipts));
+ expect(flow.setInvoices).toHaveBeenCalledWith([]);expect(flow.setReceiptsStatus).toHaveBeenCalledWith('available');
+ const html=renderToStaticMarkup(createElement(BillingDocuments,{invoices:flow.setInvoices.mock.lastCall![0],receipts:flow.setReceipts.mock.lastCall![0],receiptsStatus:flow.setReceiptsStatus.mock.lastCall![0],busy:false,loading:false,onPrint(){},onReload(){}}));
+ expect(html).toContain('<h4>Payment receipt</h4>');expect(html).toContain('href="https://rzp.io/qa-receipt"');expect(html).toContain('View receipt');expect(html).not.toContain('Print or save as PDF');
 });

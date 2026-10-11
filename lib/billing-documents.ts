@@ -12,7 +12,7 @@ export type GstDocument = {
   listPricePaise?: number; discountPaise?: number; taxableValuePaise?: number; cgstPaise?: number; sgstPaise?: number; igstPaise?: number;
   refundId?: string; refundReason?: string; originalInvoiceNumber?: string; originalInvoiceDate?: string;
 };
-export type GatewayReceipt = {id: string; number: string | null; status: string; amountPaise: number; paidAt: string | null; url: string | null};
+export type GatewayReceipt = {id: string; number?: string | null; status: string; amountPaise: number; paidAt?: string | null; url: string | null};
 export type BillingDocumentsReply = {invoices: GstDocument[]; receipts: GatewayReceipt[]; receiptsStatus: "available" | "unavailable"};
 
 export async function printGstDocument(document: GstDocument, loadHtml: () => Promise<string>, isCurrent = () => true) {
