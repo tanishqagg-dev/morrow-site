@@ -25,3 +25,12 @@ export function invoiceProfileForCheckout(business: boolean, details: Partial<In
   if (!details.businessName?.trim() || !details.address?.trim() || !/^[0-9]{6}$/.test(details.postalCode || "")) throw new Error("Complete your business name, billing address and six-digit PIN code.");
   return { kind: "business", ...empty(), ...details };
 }
+
+export function invoiceRecipientFromAccount(account?: {invoice_recipient_name?: string | null; name?: string} | null) {
+  return account?.invoice_recipient_name?.trim() || "";
+}
+export function invoiceRecipientNameForCheckout(value: string) {
+  const name = value.trim();
+  if (name.length < 2 || name.length > 160) throw new Error("Enter your name using 2 to 160 characters.");
+  return name;
+}

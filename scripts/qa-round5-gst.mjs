@@ -48,7 +48,14 @@ try{
   await page.goto(`${origin}/subscribe?qa=gst${recipient?'':'&view=subscription'}`,{waitUntil:'networkidle'});
   if(recipient){
    await page.locator('#billing-state').waitFor();
-   if(state==='recipient-consumer')assert.equal(await page.getByLabel('Your name',{exact:true}).inputValue(),'अनन्या शर्मा');
+   if(state==='recipient-consumer'){
+    const input=page.getByLabel('Your name',{exact:true}),button=page.getByRole('button',{name:'Subscribe',exact:true});
+    assert.equal(await input.inputValue(),'अनन्या शर्मा');
+    await input.fill('');assert.equal(await button.isEnabled(),false);
+    await input.fill('A');assert.equal(await button.isEnabled(),false);
+    await input.fill('अनन्या शर्मा');assert.equal(await button.isEnabled(),true);
+    assert.equal(await input.getAttribute('maxlength'),'160');
+   }
    else {await page.getByText('Business invoice (optional)',{exact:true}).click();assert.equal(await page.getByLabel('Registered business name').inputValue(),'Morrow QA Private Limited');assert.equal(await page.getByLabel('Your name',{exact:true}).count(),0);}
   }else{
    await page.getByRole('heading',{name:'Your subscription',exact:true}).waitFor();

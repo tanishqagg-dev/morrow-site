@@ -24,7 +24,7 @@ try {
   let requestStatus={consent:'pending',waiting:'approved',connected:'connected',expired:'expired'}[state];
   const subscription={id:'subscription-test',account_id:accountId,plan_id:plan.id,razorpay_subscription_id:'sub_test',status:accountView&&state!=='devices'?state:state==='payment-check'?'created':'active',quantity:1,scheduled_quantity:null,paid_until:paid?future:recent,cancel_at_period_end:false,plan:{name:plan.name,period:'monthly',amount_paise:plan.amountPaise,charge_amount_paise:plan.chargeAmountPaise}};
   const seat={id:'seat-test',account_id:accountId,email:'qa@example.test',hasLicense:true,licenseId:'license-test',licenseStatus:'active',expiresAt:future};
-  const snapshot={accounts:[{id:accountId,kind:'personal',name:'Personal account',billing_email:'qa@example.test',owner_user_id:'qa-user',created_at:recent,invoice_profile:{kind:'consumer',stateCode:'07'}}],subscriptions:paid||accountView||state==='payment-check'?[subscription]:[],seats:paid?[seat]:[],payments:[],trial:{enabled:false,days:7}};
+  const snapshot={accounts:[{id:accountId,kind:'personal',name:'Personal account',billing_email:'qa@example.test',owner_user_id:'qa-user',created_at:recent,invoice_recipient_name:'QA Buyer',invoice_profile:{kind:'consumer',stateCode:'07'}}],subscriptions:paid||accountView||state==='payment-check'?[subscription]:[],seats:paid?[seat]:[],payments:[],trial:{enabled:false,days:7}};
   await page.route('**/*',async route=>{
    const request=route.request(),url=new URL(request.url());
    if(url.origin===origin)return route.continue();
@@ -37,6 +37,7 @@ try {
     else if(body.action==='desktop_request')payload={request:{id,status:requestStatus,deviceName:'Tanishq’s MacBook Air',deviceModel:'MacBook Air',appVersion:'0.3.12',requestedAt:recent,expiresAt:state==='expired'?recent:future,seatInUse:null}};
     else if(body.action==='devices')payload={devices:[{installationId:id,deviceName:'Tanishq’s MacBook Air',deviceModel:'MacBook Air',appVersion:'0.3.12',activatedAt:recent,lastSeenAt:recent,seatId:seat.id,accountName:'Personal account'}]};
     else if(body.action==='approve_desktop'){assert.equal(body.userCode,'K7M4QX');requestStatus='approved';payload={approved:true};}
+    else if(body.action==='save_invoice_recipient_name'){assert.equal(body.name,'QA Buyer');payload={saved:true};}
     else if(body.action==='save_invoice_profile'){assert.equal(body.invoiceProfile.kind,'consumer');payload={saved:true};}
     else if(body.action==='checkout')payload={subscriptionId:'sub_test',keyId:'rzp_test_fixture',email:'qa@example.test',name:'QA',trialEndsAt:null,trialAuthorizationExpiresAt:null};
     else if(body.action==='invoices')payload={invoices:[],receipts:[],receiptsStatus:'available'};

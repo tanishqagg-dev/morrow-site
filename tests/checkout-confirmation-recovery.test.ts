@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
-import { invoiceProfileForCheckout } from '../lib/invoice-profile';
+import { invoiceProfileForCheckout, invoiceRecipientNameForCheckout } from '../lib/invoice-profile';
 import { BillingError, parseCheckoutReply, parsePendingPayment, type BillingSnapshot } from '../lib/billing';
 import { trialAuthorizationExpired, pendingPaymentOutcome, PAYMENT_CONFIRMATION_TIMEOUT_MS, subscriptionStage } from '../lib/subscription-flow';
 const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
@@ -15,13 +15,13 @@ function execute(start: string, end: string, suffix: string, bindings: Record<st
   const code = ts.transpileModule(source.slice(begin, source.indexOf(end, begin)) + suffix, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   return new Function(...Object.keys(bindings), code)(...Object.values(bindings));
 }
-function checkoutFlow(prepared = reply(), preparedAt = now) {
+function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<string, unknown> = {}) {
   let pending: Promise<void>;
   const open = vi.fn();
   const bindings = {
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
-    businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
+    invoiceRecipientName: "QA Buyer", invoiceRecipientNameForCheckout, businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
     inviteAccepted: true, activePlan: { id: 'plan' }, audience: 'personal', seats: 1, period: 'monthly',
     couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
     prepared, preparedCheckout: { preparedAt, requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, trialAuthorizationExpired, PAYMENT_CONFIRMATION_TIMEOUT_MS, parseCheckoutReply, BillingError,
@@ -29,6 +29,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now) {
     billingRequest: vi.fn(async (_endpoint, payload) => payload.action === 'checkout' ? reply() : {}),
     rememberPendingPayment: vi.fn(), loadRazorpayCheckout: async () => {}, setPreparedCheckout: vi.fn(), setNotice: vi.fn(), setCheckoutOpen: vi.fn(), setError: vi.fn(),
     setTrialDeclined: vi.fn(), window: { Razorpay: class { open = open; on() {} } },
+    ...overrides,
     run: (_name: string, work: () => Promise<void>) => { pending = work(); return pending.catch(() => {}); },
   };
   const start = execute('  const startCheckout = () => {', '  const forgetDesktop =', '\nreturn startCheckout;', bindings);
@@ -192,5 +193,30 @@ describe('bounded payment confirmation', () => {
       onSignIn() {}, onSignOut() {}, onRefresh() {}, onAccount() {}, onBack() {}, onConnect() {}, onRetryPayment() {} }));
     expect(html).toContain('Try again'); expect(html).toContain('Contact support');
     expect(html).toContain('A charge may still have gone through'); expect(html).not.toContain('Nothing was charged');
+  });
+});
+
+describe('DOC-4b invoice recipient before checkout', () => {
+  it('saves the consumer name before profile and checkout or gateway opening', async () => {
+    const flow = checkoutFlow(reply(), 0, {invoiceRecipientName: '  अनन्या शर्मा  '}); await flow.start();
+    expect(flow.billingRequest.mock.calls.map(([,body]) => body.action)).toEqual(['save_invoice_recipient_name','save_invoice_profile','checkout']);
+    expect(flow.billingRequest.mock.calls[0][1]).toEqual({action:'save_invoice_recipient_name',accountId:'account',name:'अनन्या शर्मा'});
+  });
+  it('rejects an empty name before any billing mutation', async () => {
+    const flow = checkoutFlow(reply(), now, {invoiceRecipientName: ' '});
+    await expect(flow.start()).rejects.toThrow('name'); expect(flow.billingRequest).not.toHaveBeenCalled();expect(flow.open).not.toHaveBeenCalled();
+  });
+  it('does not open checkout or reserve it when saving the name fails', async () => {
+    const flow = checkoutFlow();flow.billingRequest.mockImplementation(async (_endpoint,body) => {if(body.action === 'save_invoice_recipient_name')throw new Error('Name save failed');return {};});
+    await expect(flow.start()).rejects.toThrow('Name save failed'); expect(flow.open).not.toHaveBeenCalled();expect(flow.billingRequest.mock.calls).toHaveLength(1);
+  });
+  it('keeps the business name and omits the consumer-name action for business invoices', async () => {
+    const flow = checkoutFlow(reply(),now,{businessInvoice:true,invoiceRecipientName:'',invoiceDetails:{businessName:'QA Business',stateCode:'07',gstin:'07AAACM1234A1Z5',address:'Test address',postalCode:'110001'}});
+    await flow.start();expect(flow.billingRequest.mock.calls.map(([,body])=>body.action)).toEqual(['save_invoice_profile']);
+    expect(flow.billingRequest.mock.calls[0][1].invoiceProfile.businessName).toBe('QA Business');expect(flow.open).toHaveBeenCalledOnce();
+  });
+  it('stops checkout if the account changes while saving the consumer name', async () => {
+    const flow=checkoutFlow();flow.billingRequest.mockImplementation(async(_endpoint,body)=>{if(body.action==='save_invoice_recipient_name')flow.activeUserId.current='other-user';return {};});
+    await flow.start();expect(flow.billingRequest.mock.calls).toHaveLength(1);expect(flow.open).not.toHaveBeenCalled();
   });
 });

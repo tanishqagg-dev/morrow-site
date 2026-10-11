@@ -55,7 +55,7 @@ export function clearPendingAuthorizations(storage: Pick<Storage, "length" | "ke
 
 export type BillingAccount = {
   id: string; kind: "personal" | "company"; name: string; billing_email: string;
-  owner_user_id: string; created_at: string; invoice_profile?: InvoiceProfile | null;
+  owner_user_id: string; created_at: string; invoice_profile?: InvoiceProfile | null; invoice_recipient_name?: string | null;
 };
 
 const subscriptionStatusSchema = z.enum(["creating", "created", "authenticated", "active", "pending", "halted", "paused", "cancelled", "completed", "expired", "trialing", "trial_canceled", "unknown"]).catch("unknown");

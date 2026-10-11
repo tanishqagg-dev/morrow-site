@@ -11,7 +11,7 @@ import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, PAYMENT_CONFIRMATION_TIMEOUT_MS, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
-import { gstStates, invoiceFormFromProfile, invoiceProfileForCheckout } from "@/lib/invoice-profile";
+import { gstStates, invoiceFormFromProfile, invoiceProfileForCheckout, invoiceRecipientFromAccount, invoiceRecipientNameForCheckout } from "@/lib/invoice-profile";
 import { pollDesktopCompletion } from "@/lib/desktop-completion";
 import { revokeConnectedMac, signOutEverywhere, type ConnectedMac } from "@/lib/connected-macs";
 import { clearDesktopRequest, resolveDesktopRequest, type StoredDesktopRequest } from "@/lib/desktop-storage";
@@ -155,6 +155,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     activeUserId.current = identity?.userId || null;
     return () => { activeUserId.current = null; };
   }, [identity?.userId]);
+  const [invoiceRecipientName, setInvoiceRecipientName] = useState("");
   const [businessInvoice,setBusinessInvoice] = useState(false);
   const [invoiceDetails,setInvoiceDetails] = useState({businessName:"",gstin:"",address:"",stateCode:"",postalCode:""});
   const [inviteCode, setInviteCode] = useState("");
@@ -374,7 +375,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const renewalPeriod = period === "yearly" ? "year" : "month";
   const firstPaymentTerms = appliedCoupon?.duration === "first_cycle" ? `First payment only. Then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod} including GST.` : "";
   const trialEligible = Boolean(trialConfig.enabled && snapshot?.trial?.enabled && snapshot.trial.eligible && !trialDeclined && audience === "personal" && period === "monthly" && !appliedCoupon && !businessInvoice);
-  const checkoutContext = `${couponContext}:${inviteCode}:${businessInvoice}:${JSON.stringify(invoiceDetails)}:${trialEligible}`;
+  const checkoutContext = `${couponContext}:${inviteCode}:${businessInvoice}:${JSON.stringify(invoiceDetails)}:${invoiceRecipientName}:${trialEligible}`;
   const prepared = preparedCheckout?.context === checkoutContext ? preparedCheckout.reply : null;
   const trialEndsAt = prepared?.trialEndsAt || (snapshot?.subscriptions || []).find(sub => sub.account_id === selectedAccountId && sub.status === "created")?.trial_ends_at || null;
   const billedSeats = audience === "company" ? seats : 1;
@@ -389,7 +390,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (!selectedAccount || invoicePrefilledAccount.current === selectedAccount.id) return;
     invoicePrefilledAccount.current = selectedAccount.id;
     const form = invoiceFormFromProfile(selectedAccount?.invoice_profile);
-    setBusinessInvoice(form.businessInvoice); setInvoiceDetails(form.details); setPreparedCheckout(null);
+    setBusinessInvoice(form.businessInvoice); setInvoiceDetails(form.details); setInvoiceRecipientName(invoiceRecipientFromAccount(selectedAccount)); setPreparedCheckout(null);
   }, [selectedAccount]);
   useEffect(() => { if (selectedAccount) setAudience(selectedAccount.kind); }, [selectedAccount?.kind]);
   const subscriptions = useMemo(() => (snapshot?.subscriptions || []).filter((subscription) =>
@@ -462,6 +463,13 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (!signedIn || !selectedAccount) throw new Error("Your account is still loading. Please try again.");
     const checkoutUser = activeUserId.current;
     const invoiceProfile = invoiceProfileForCheckout(businessInvoice, invoiceDetails);
+    if (!businessInvoice) {
+      const name = invoiceRecipientNameForCheckout(invoiceRecipientName);
+      const token = await authToken();
+      if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
+      await billingRequest("billing-customer", { action: "save_invoice_recipient_name", accountId: selectedAccount.id, name }, token);
+      if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
+    }
     try {
       await billingRequest("billing-customer", { action: "save_invoice_profile", accountId: selectedAccount.id, invoiceProfile }, await authToken());
     } catch (caught) {
@@ -888,6 +896,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
             {(appliedCoupon.paymentMethods || ["upi"]).map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
           </select>
         </label>}
+        {!businessInvoice && <label className={styles.field} htmlFor="invoice-recipient-name">Your name
+          <input id="invoice-recipient-name" autoComplete="name" required minLength={2} maxLength={160} value={invoiceRecipientName}
+            disabled={Boolean(busy) || checkoutOpen} onChange={event => { setInvoiceRecipientName(event.target.value); setPreparedCheckout(null); }} />
+        </label>}
         <label className={styles.field} htmlFor="billing-state">Your state
           <select id="billing-state" aria-label="Your state" required value={invoiceDetails.stateCode} disabled={Boolean(busy) || checkoutOpen}
             onChange={event => setInvoiceDetails({ ...invoiceDetails, stateCode: event.target.value })}>
@@ -896,7 +908,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           </select>
         </label>
         <p className={styles.finePrint}>We need your state for the GST invoice.</p>
-        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || !invoiceDetails.stateCode || (!activePlan && appliedCoupon?.duration !== "fixed")}>
+        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
           {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
         <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
@@ -919,7 +931,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           <label>GSTIN<input value={invoiceDetails.gstin} maxLength={15} autoCapitalize="characters" onChange={e=>{const gstin=e.target.value.toUpperCase();setInvoiceDetails({...invoiceDetails,gstin});}}/></label>
           <label>Registered billing address<textarea value={invoiceDetails.address} maxLength={500} onChange={e=>setInvoiceDetails({...invoiceDetails,address:e.target.value})}/></label>
           <label>PIN code<input value={invoiceDetails.postalCode} inputMode="numeric" maxLength={6} onChange={e=>setInvoiceDetails({...invoiceDetails,postalCode:e.target.value})}/></label>
-          <p>{activePlan?.gstDiscountAvailable ? `With valid GSTIN details, Morrow funds a discount equal to the standard GST charge. Your total is ${rupees(activePlan.amountPaise)} per ${renewalPeriod}, including applicable GST. Coupons cannot be combined with this discount.` : "GST is included in the checkout total."} Your details go to our billing team for the GST invoice. A GSTIN does not guarantee input tax credit.</p>
+          <p>{activePlan?.gstDiscountAvailable ? `With valid GSTIN details, Morrow funds a discount equal to the standard GST charge. Your total is ${rupees(activePlan.amountPaise)} per ${renewalPeriod}, including applicable GST. Coupons cannot be combined with this discount.` : "GST is included in the checkout total."} These details are used for your GST invoice. A GSTIN does not guarantee input tax credit.</p>
         </div>}
       </details>
         </div>
