@@ -37,7 +37,7 @@ export function DesktopConsent({ request, problem, resetCode = 0, busy, canConne
     <h1 id="desktop-consent-title">Connect this Mac?</h1>
     <p>{request.deviceName || "Mac"}{request.deviceModel ? ` · ${request.deviceModel}` : ""}</p>
     <p className={styles.finePrint}>App version {request.appVersion || "unavailable"} · Requested around {new Date(request.requestedAt).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</p>
-    <div className={styles.codeEntry} role="group" aria-labelledby="desktop-code-label">
+    {request.codeRequired !== false && <div className={styles.codeEntry} role="group" aria-labelledby="desktop-code-label">
       <p id="desktop-code-label">Enter the code shown in Morrow</p>
       <div className={styles.codeBoxes}>{code.map((character, index) => <input key={index} ref={element => { inputs.current[index] = element; }}
         aria-label={`Code character ${index + 1}`} aria-invalid={Boolean(problem)} aria-describedby={problem ? "desktop-code-error" : undefined}
@@ -53,10 +53,11 @@ export function DesktopConsent({ request, problem, resetCode = 0, busy, canConne
           }
         }} />)}</div>
       {problem && <p id="desktop-code-error" role="alert">{problem}</p>}
-    </div>
+    </div>}
+    {request.codeRequired === false && problem && <p role="alert">{problem}</p>}
     {request.seatInUse && <p>Your seat is connected to {request.seatInUse.deviceName || "another Mac"}. Replacing it signs that Mac out.</p>}
     {!canConnect && <p>Your access is active, but this email has no available seat. Check your subscription.</p>}
-    <button className={styles.primary} disabled={busy || code.some(character => !character) || !canConnect} onClick={() => onConnect(code.join(""), Boolean(request.seatInUse))}>{busy ? "Connecting…" : request.seatInUse ? "Replace that Mac" : "Connect this Mac"}</button>
+    <button className={styles.primary} disabled={busy || (request.codeRequired !== false && code.some(character => !character)) || !canConnect} onClick={() => onConnect(code.join(""), Boolean(request.seatInUse))}>{busy ? "Connecting…" : request.seatInUse ? "Replace that Mac" : "Connect this Mac"}</button>
     <button className={styles.textButton} onClick={onForget} disabled={busy}>This isn't my Mac</button>
   </section>;
 }

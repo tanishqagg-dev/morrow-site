@@ -55,3 +55,7 @@ it('BROWSER-05 preserves the authenticated OPEN_CHECKOUT conflict details',async
  vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','public-test-key');const openCheckout={id:'local',subscriptionId:'sub_open',requestId:'request',accountId:'account',planId:'monthly',planName:'Personal',period:'monthly',quantity:1,couponCode:null,paymentMethod:'upi',trial:false,amountPaise:11800,currency:'INR',keyId:'rzp_test_fixture',expiresAt:null,resumable:true};vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json({openCheckout,error:{code:'OPEN_CHECKOUT',message:'Unfinished checkout'}},{status:409})));
  const {billingRequest}=await import('../lib/billing');await expect(billingRequest('billing-customer',{action:'checkout'},'test-token')).rejects.toMatchObject({code:'OPEN_CHECKOUT',openCheckout});
 });
+
+it('launch sign-in-again bypasses the installed Clerk modal without replaying cancel',async()=>{
+ vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY','public-test-key');const fetch=vi.fn().mockResolvedValue(Response.json({...hint,sign_in_again:true},{status:403}));vi.stubGlobal('fetch',fetch);const {billingRequest}=await import('../lib/billing');const modal=vi.fn();const enhanced=clerkHook(body=>billingRequest('billing-customer',body,'test-token'),modal);await expect(enhanced({action:'cancel'})).rejects.toMatchObject({code:'SIGN_IN_AGAIN_REQUIRED'});expect(modal).not.toHaveBeenCalled();expect(fetch).toHaveBeenCalledOnce();
+});

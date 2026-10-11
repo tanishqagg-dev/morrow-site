@@ -129,6 +129,10 @@ export function isReverificationHint(value: unknown): boolean {
   const hint = value as { clerk_error?: { type?: string; reason?: string } } | null;
   return hint?.clerk_error?.type === "forbidden" && hint.clerk_error.reason === "reverification-error";
 }
+export class SignInAgainRequired extends Error {
+  readonly code = "SIGN_IN_AGAIN_REQUIRED";
+  constructor() { super("For your security, sign in again to continue."); }
+}
 export class BillingError extends Error {
   constructor(message: string, public code?: string, public retryAfter?: number, public openCheckout?: OpenCheckout) { super(message); }
 }
@@ -169,6 +173,7 @@ export async function billingRequest<T>(functionName: string, body?: object, tok
     }
     const result = await response.json().catch(() => null);
     if (controller.signal.aborted) throw new Error("Request timed out.");
+    if (response.status === 403 && result?.sign_in_again === true) throw new SignInAgainRequired();
     if (response.status === 403 && isReverificationHint(result)) return result as T;
     if (!response.ok) throw new BillingError(result?.error?.message || "Morrow billing could not complete this request.", result?.error?.code, result?.retryAfter, openCheckoutSchema.safeParse(result?.openCheckout).success ? openCheckoutSchema.parse(result.openCheckout) : undefined);
     if (result === null || typeof result !== "object") throw new Error("Morrow billing returned an unreadable response. Refresh your subscription to check its status.");

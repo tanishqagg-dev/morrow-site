@@ -3,7 +3,7 @@
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClerkProvider, SignUp, SignIn, UserButton, useAuth, useClerk, useUser, useReverification } from "@clerk/react";
 import { ArrowRight, CheckCircle, CreditCard, SpinnerGap, ArrowClockwise } from "@phosphor-icons/react";
-import { isReverificationHint, BillingError, parseCheckoutReply, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, clearPendingAuthorizations, rupees } from "@/lib/billing";
+import { isReverificationHint, SignInAgainRequired, BillingError, parseCheckoutReply, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, clearPendingAuthorizations, rupees } from "@/lib/billing";
 import type { BillingTrial, CheckoutReply, BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription, OpenCheckout } from "@/lib/billing";
 import styles from "./SubscriptionFlow.module.css";
 import { SubscriptionRecoveryGuidance } from "./SubscriptionRecoveryGuidance";
@@ -32,6 +32,9 @@ import { OpenCheckoutPanel } from "./OpenCheckoutPanel";
 import { selectConfirmingCheckout, pollConfirmation, listenForReturn } from "@/lib/checkout-confirmation";
 import { BANK_CONFIRMATION_TIMEOUT_MS } from "@/lib/subscription-flow";
 import { subscriptionStatusLabel } from "@/lib/subscription-label";
+import { SignInAgainStep } from "./SignInAgainStep";
+import { makeSignInIntent, readSignInIntent, signInIntentUrl, isImmediateSignInRepeat, type SignInIntent } from "@/lib/sign-in-intent";
+import { trialPriceLine } from "@/lib/trial-price";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -52,7 +55,7 @@ type CustomerIdentity = {
   email: string | null;
   getToken: () => Promise<string | null>;
   openSignIn: () => void;
-  signOut: () => Promise<void>;
+  signOut: (redirectUrl?: string) => Promise<void>;
   sensitiveMutation?: (body: object, expectedUserId: string) => Promise<unknown>;
 };
 
@@ -137,11 +140,11 @@ function ClerkBillingPortal() {
     email: user?.primaryEmailAddress?.emailAddress || null,
     getToken: () => getToken(),
     openSignIn: () => { void clerk.openSignIn({ fallbackRedirectUrl: "/subscribe" }); },
-    signOut: () => {
+    signOut: (redirectUrl?: string) => {
       try { clearDesktopRequest(sessionStorage); if (userId) clearPendingAuthorizations(sessionStorage, userId); } catch { /* Optional storage. */ }
       const url = new URL(window.location.href); url.searchParams.delete("desktop");
       window.history.replaceState(null, "", url.pathname + url.search + url.hash);
-      return clerk.signOut();
+      return clerk.signOut(redirectUrl ? {redirectUrl} : undefined);
     },
   }), [reverifiedMutation, clerk, getToken, isLoaded, user?.primaryEmailAddress?.emailAddress, userId]);
   return <BillingPortalContent key={userId || "signed-out"} identity={identity} authTitle={authMode === "sign-up" ? "Create your Morrow account." : "Sign in to Morrow."} authContent={<div className={styles.embeddedAuth}>
@@ -458,11 +461,32 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const claimableSeats = (snapshot?.seats || []).filter((seat) =>
     seat.email.toLowerCase() === identity?.email?.toLowerCase() && seat.licenseStatus !== "revoked" && paidAccountIds.has(seat.account_id));
 
+  const [signInStep, setSignInStep] = useState<{intent:SignInIntent;mode:"sign-in"|"confirm"|"support"}|null>(null);
+  const returnedIntent = useRef<SignInIntent|null>(null);
+  useEffect(() => {
+    if (!signedIn || !snapshot) return;
+    const intent = readSignInIntent(window.location.search);
+    if (!intent || returnedIntent.current) return;
+    if (intent.userId !== identity?.userId || !snapshot.accounts.some(account => account.id === intent.accountId)) return;
+    returnedIntent.current = intent;
+    setSelectedAccountId(intent.accountId);
+    setManageAccount(intent.body.action !== "approve_desktop");
+    if (intent.body.action === "cancel") setConfirmCancel(true);
+    if (intent.body.action === "change_quantity") setSeats(intent.body.quantity);
+    if (intent.body.action === "assign_seat") setSeatEmail(intent.body.email);
+    setSignInStep({intent,mode:"confirm"});
+  }, [signedIn, snapshot, identity?.userId]);
+  const clearSignInIntent = () => {
+    setSignInStep(null); returnedIntent.current = null;
+    const url = new URL(window.location.href); url.searchParams.delete("billing_intent");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  };
+
   const run = async (name: string, task: () => Promise<void>) => {
     setBusy(name); setError(""); setNotice("");
     try { await task(); } catch (caught) {
       if ((caught as { code?: string })?.code === "reverification_cancelled") setNotice("Verification cancelled. Nothing changed.");
-      else setError(errorText(caught));
+      else if (!(caught instanceof SignInAgainRequired)) setError(errorText(caught));
     }
     finally { setBusy(""); }
   };
@@ -471,9 +495,19 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     const userId = activeUserId.current;
     const mutate = identityRef.current?.sensitiveMutation;
     if (!userId || !mutate) throw new Error("Sign in again to confirm it's you.");
-    const result = await mutate(body, userId);
+    let result: unknown;
+    try { result = await mutate(body, userId); }
+    catch (caught) {
+      if (caught instanceof SignInAgainRequired && userId === activeUserId.current) {
+        const intent = makeSignInIntent(body, selectedAccountRef.current, userId);
+        const previous = returnedIntent.current;
+        setSignInStep({intent:{...intent,attemptedAt:previous?.attemptedAt},mode:isImmediateSignInRepeat(previous)?"support":"sign-in"});
+      }
+      throw caught;
+    }
     if (userId !== activeUserId.current) throw new Error("Your account changed. Sign in again before continuing.");
     if (isReverificationHint(result)) throw new Error("Verification wasn't completed. Try again.");
+    if (returnedIntent.current?.body.action === (body as {action?:string}).action) clearSignInIntent();
     return result;
   };
 
@@ -746,10 +780,16 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         return billingRequest("billing-customer", body, token);
       }, replace, () => Boolean(userId && userId === activeUserId.current));
       if (userId !== activeUserId.current) return;
+      if (returnedIntent.current?.body.action === "approve_desktop") clearSignInIntent();
       setDesktopDetails(current => current ? { ...current, status: "approved" } : null);
       setNotice("");
     } catch (caught) {
       if (userId !== activeUserId.current) return;
+      if (caught instanceof BillingError && caught.code === "DEVICE_CODE_REQUIRED") {
+        setDesktopDetails(current => current ? {...current,codeRequired:true} : null);
+        setDesktopProblem(caught.message); setCodeReset(value => value + 1);
+        return;
+      }
       if (caught instanceof BillingError && caught.code === "DEVICE_CODE_MISMATCH") {
         setCodeReset(value => value + 1); setDesktopProblem("That code doesn't match. Check Morrow on your Mac.");
         const result = await billingRequest<{request:DesktopRequest}>("billing-customer", {action:"desktop_request",requestId:desktopRequest}, await authToken());
@@ -956,9 +996,32 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         throw caught;
       }
       await refresh();
-      setConfirmCancel(false);
+      clearSignInIntent();setConfirmCancel(false);
       setNotice(action === "cancel" ? (subscription.status === "trialing" ? "Trial canceled. You will not be charged. Access stays active until your trial ends." : "Renewal cancelled. Access stays active through the paid term.") : "Seat change scheduled for the next billing cycle.");
     });
+
+  const signInAgain = () => void run("sign-in-again", async () => {
+    if (!signInStep || !identity) return;
+    await identity.signOut(signInIntentUrl(window.location.href, {...signInStep.intent,attemptedAt:Date.now()}));
+  });
+  const confirmReturnedAction = () => {
+    const intent = signInStep?.intent;
+    if (!intent || intent.userId !== activeUserId.current || intent.accountId !== selectedAccountRef.current) return;
+    const body = intent.body;
+    if (body.action === "approve_desktop") {setManageAccount(false);setSignInStep(null);return;}
+    if (body.action === "cancel" || body.action === "change_quantity") {
+      const subscription = snapshot?.subscriptions.find(item => item.id === body.subscriptionId && item.account_id === intent.accountId);
+      if (!subscription) {setError("This subscription is unavailable. Refresh your account.");return;}
+      changeSubscription(body.action, subscription, body.action === "change_quantity" ? body.quantity : undefined);
+      return;
+    }
+    void run("confirm-returned-action", async () => {
+      await sensitiveMutation(body);
+      clearSignInIntent();
+      if (body.action === "sign_out_everywhere") {forgetDesktop();await identity?.signOut();return;}
+      await refresh(); await loadDevices(); setNotice("Your change is confirmed.");
+    });
+  };
 
   const printInvoice = (document: GstDocument) => {
     const userId = activeUserId.current, accountId = selectedAccountId;
@@ -1013,6 +1076,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       </form>
       <p className={styles.supportNote}>No invitation yet? <a href="/contact">Request beta access</a>.</p>
     </section>}
+    {signedIn && signInStep && <SignInAgainStep intent={signInStep.intent} mode={signInStep.mode} busy={Boolean(busy)} onSignIn={signInAgain} onConfirm={confirmReturnedAction} onDismiss={() => {clearSignInIntent();setConfirmCancel(false);}} />}
     {signedIn && openCheckout && !isConfirming && <OpenCheckoutPanel checkout={openCheckout} busy={Boolean(busy) || checkoutOpen}
       onResume={() => startCheckout(true, openCheckout)} onChangePlan={changeServerCheckoutPlan} />}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
@@ -1032,7 +1096,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         {trialEligible ? <>
           <ol className={styles.trialTimeline} aria-label="Your trial timeline" aria-live="polite">
             <li><div><span className={styles.timelineDate}>Today</span><strong className={styles.timelineAmount}>₹0</strong><p>Set up AutoPay to start your trial.</p></div></li>
-            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{serverQuote || prepared ? `${rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge` : "Price unavailable"}</strong><p>{serverQuote ? `${rupees(quote)} + ${rupees(gst)} GST, then ${rupees(serverQuote.renewalAmountPaise)} monthly.` : "No published plan is available right now."}</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
+            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{serverQuote || prepared ? `${rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge` : activePlan?.chargeAmountPaise !== undefined ? `${rupees(activePlan.chargeAmountPaise)} after the trial` : "Price unavailable"}</strong><p>{trialPriceLine(activePlan,serverQuote)}</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
           </ol>
           <p className={styles.authorizationNote}>Your bank may show a ₹5 check. It is refunded automatically. <a href="https://razorpay.com/docs/payments/subscriptions/faqs/" target="_blank" rel="noopener noreferrer">How authorization works ↗</a></p>
         </> : <>

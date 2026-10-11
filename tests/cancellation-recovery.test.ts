@@ -6,7 +6,7 @@ import { BillingError } from '../lib/billing';
 function cancellationFlow() {
   const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
   let pending: Promise<void>;
-  const bindings = {
+  const bindings = { clearSignInIntent:vi.fn(),
     signedIn: true, BillingError, authToken: async () => 'qa-token', billingRequest: vi.fn(),
     refresh: vi.fn(), setCancelRetryId: vi.fn(), setConfirmCancel: vi.fn(), setNotice: vi.fn(),
     run: (_action: string, work: () => Promise<void>) => { pending = work(); },

@@ -1,7 +1,7 @@
 import { BillingError } from "./billing";
 export type SeatInUse = { installationId: string; deviceName: string | null; lastSeenAt: string | null };
 export type DesktopRequest = {
-  id: string; status: "pending" | "approved" | "connected" | "expired";
+  codeRequired?: boolean; id: string; status: "pending" | "approved" | "connected" | "expired";
   deviceName: string | null; deviceModel: string | null; appVersion: string | null;
   requestedAt: string; expiresAt: string; seatInUse: SeatInUse | null;
 };
@@ -18,10 +18,10 @@ export async function approveDesktopRequest(request: DesktopRequest, seatId: str
   const check = () => {
     if (!isCurrent()) throw new Error("Your account changed. Open Morrow and start sign-in again.");
     if (desktopRequestExpired(request)) throw new BillingError("This connection request expired. Open Morrow and start sign-in again.", "DEVICE_LOGIN_EXPIRED");
-    if (request.status !== "pending" || userCode.length !== 6) throw new Error("Enter the six-character code shown in Morrow on your Mac.");
+    if (request.status !== "pending" || (request.codeRequired !== false && userCode.length !== 6)) throw new Error("Enter the six-character code shown in Morrow on your Mac.");
   };
   check();
   if (request.seatInUse && !replace) throw new Error("Your seat is used by another Mac. Choose Replace that Mac to continue.");
-  await send({ action: "approve_desktop", requestId: request.id, seatId, userCode,
+  await send({ action: "approve_desktop", requestId: request.id, seatId, ...(request.codeRequired === false ? {} : {userCode}),
     ...(replace && request.seatInUse ? {replaceInstallationId:request.seatInUse.installationId} : {}) });
 }

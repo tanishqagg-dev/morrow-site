@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-describe("Morrow private beta", () => {
+describe("Morrow public launch", () => {
   it("keeps invitations and full paid-beta pricing consistent on the public site", async () => {
     const [home, header] = await Promise.all([read("published-home/index.html"), read("components/SiteHeader.tsx")]);
     expect(home).toContain('href="/subscribe"');
@@ -30,7 +30,7 @@ describe("Morrow private beta", () => {
     }
     expect(home).toContain('name="morrow-beta"');
     expect(home).toContain('data-netlify="true"');
-    expect(home).toContain('value="Join the beta"');
+    expect(home).not.toContain('value="Join the beta"');
     expect(home).toContain('value="Book a demo"');
     expect(skeleton).toContain('name="morrow-beta"');
   });
