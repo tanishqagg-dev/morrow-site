@@ -30,7 +30,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now) {
     setTrialDeclined: vi.fn(), window: { Razorpay: class { open = open; on() {} } },
     run: (_name: string, work: () => Promise<void>) => { pending = work(); return pending.catch(() => {}); },
   };
-  const start = execute('  const startCheckout = () => {', '  const approveDesktop =', '\nreturn startCheckout;', bindings);
+  const start = execute('  const startCheckout = () => {', '  const forgetDesktop =', '\nreturn startCheckout;', bindings);
   return { ...bindings, open, start: () => { start(); return pending!; } };
 }
 const receipt = { desktopRequest: '', subscriptionId: 'sub-provider', startedAt: now };

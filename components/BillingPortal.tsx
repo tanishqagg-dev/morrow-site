@@ -10,6 +10,8 @@ import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
+import { DesktopConsent } from "./DesktopConsent";
+import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consent";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -162,6 +164,9 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const desktopRequestRef = useRef("");
   const [desktopRequest, setDesktopRequest] = useState("");
   const [desktopConnected, setDesktopConnected] = useState(false);
+  const [desktopDetails, setDesktopDetails] = useState<DesktopRequest | null>(null);
+  const [desktopProblem, setDesktopProblem] = useState("");
+  const [codeConfirmed, setCodeConfirmed] = useState(false);
   const [desktopConnecting, setDesktopConnecting] = useState(false);
   const [busy, setBusy] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -483,31 +488,65 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     }).finally(() => { if (!opened) checkoutLock.current = false; });
   };
 
-  const approveDesktop = async (seat: BillingSeat, userId = activeUserId.current) => {
-    if (!desktopRequest) throw new Error("Open Morrow and choose Sign in to Morrow first.");
-    if (connectionLock.current) return;
-    connectionLock.current = true;
-    setDesktopConnecting(true);
+  const forgetDesktop = () => {
+    desktopRequestRef.current = ""; setDesktopRequest(""); setDesktopDetails(null); setDesktopProblem(""); setCodeConfirmed(false); setDesktopConnected(false);
+    try { sessionStorage.removeItem("morrow:desktop-request"); } catch { /* Optional storage. */ }
+    const url = new URL(window.location.href); url.searchParams.delete("desktop");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  };
+
+  useEffect(() => {
+    if (!signedIn || !desktopRequest) return;
+    let cancelled = false;
+    const userId = activeUserId.current;
+    void (async () => {
+      const result = await billingRequest<{ request: DesktopRequest }>("billing-customer", { action: "desktop_request", requestId: desktopRequest }, await authToken());
+      if (cancelled || userId !== activeUserId.current) return;
+      setDesktopDetails(result.request); setCodeConfirmed(false);
+      setDesktopConnected(result.request.status === "connected");
+    })().catch(caught => {
+      if (!cancelled && userId === activeUserId.current) {
+        setDesktopProblem("This connection request is unavailable."); setError(errorText(caught));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [signedIn, desktopRequest, authToken]);
+
+  const approveDesktop = async (seat: BillingSeat, replace = false) => {
+    if (!desktopDetails || connectionLock.current) return;
+    const userId = activeUserId.current;
+    connectionLock.current = true; setDesktopConnecting(true);
     try {
-      const token = await authToken();
-      if (!userId || userId !== activeUserId.current) return;
-      await billingRequest("billing-customer", {action:"approve_desktop",requestId:desktopRequest,seatId:seat.id}, token);
+      await approveDesktopRequest(desktopDetails, seat.id, codeConfirmed, async body => {
+        const token = await authToken();
+        if (!userId || userId !== activeUserId.current) throw new Error("Your account changed. Start sign-in again.");
+        return billingRequest("billing-customer", body, token);
+      }, replace, () => Boolean(userId && userId === activeUserId.current));
       if (userId !== activeUserId.current) return;
-      setDesktopConnected(true);
-      try { sessionStorage.removeItem("morrow:desktop-request"); } catch { /* Optional storage. */ }
+      setDesktopDetails(current => current ? { ...current, status: "approved" } : null);
       setNotice("");
+    } catch (caught) {
+      if (userId !== activeUserId.current) return;
+      if (caught instanceof BillingError && caught.code === "DEVICE_CODE_MISMATCH") {
+        setCodeConfirmed(false); throw new Error("The code didn't match. Check the code in Morrow and start sign-in again.");
+      }
+      if (caught instanceof BillingError && caught.code === "DEVICE_LOGIN_EXPIRED") {
+        setDesktopDetails(current => current ? { ...current, status: "expired" } : null);
+      }
+      if (caught instanceof BillingError && caught.code === "DEVICE_SEAT_IN_USE") {
+        const result = await billingRequest<{ request: DesktopRequest }>("billing-customer", { action: "desktop_request", requestId: desktopRequest }, await authToken());
+        if (userId === activeUserId.current) { setDesktopDetails(result.request); setCodeConfirmed(false); }
+      }
+      throw caught;
     } finally { connectionLock.current = false; setDesktopConnecting(false); }
   };
 
   const connectAfterPayment = async (latest: BillingSnapshot, accountId: string, userId: string | null) => {
     if (!desktopRequest || desktopConnected || userId !== activeUserId.current) return;
-    const seat = paidSeatForAccount(latest, accountId, identityRef.current?.email || null);
-    if (!seat) return;
-    try { await approveDesktop(seat, userId); }
-    catch { if (userId === activeUserId.current) setNotice("Your subscription is active. Reopen Morrow and sign in to finish connecting this Mac."); }
+    if (paidSeatForAccount(latest, accountId, identityRef.current?.email || null)) setNotice("Your access is ready. Check the pairing code to connect your Mac.");
   };
 
-  const connectDesktop = (seat: BillingSeat) => void run("connect-desktop", () => approveDesktop(seat));
+  const connectDesktop = (seat: BillingSeat, replace = false) => void run("connect-desktop", () => approveDesktop(seat, replace));
 
   const refreshAccess = () => void run("refresh", async () => {
     if (identityRef.current?.loaded === false) { window.location.reload(); return; }
@@ -562,16 +601,6 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     return () => { stopped = true; clearTimeout(timer); };
   }, [paymentPending, pendingKey]);
 
-  const autoApprove = useRef<() => Promise<void>>(async () => {});
-  autoApprove.current = async () => {
-    const seat = claimableSeats.find(item => item.account_id === selectedAccountId);
-    if (seat && !desktopConnected && !desktopConnecting) await approveDesktop(seat);
-  };
-  useEffect(() => {
-    if (!hasPaidAccess || !desktopRequest || desktopConnected) return;
-    void autoApprove.current().catch(caught => setError(errorText(caught)));
-  }, [hasPaidAccess, desktopRequest, desktopConnected, selectedAccountId]);
-
   const stage = subscriptionStage({ loadFailed: authTimedOut || snapshotFailed, loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
     hasPaidAccess, paymentPending, paymentRecovery, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
 
@@ -623,7 +652,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     } catch (caught) { if (stillSelected()) throw caught; }
   });
 
-  return <BillingJourney authTitle={authTitle} authContent={authContent} accountControl={accountControl} stage={stage} email={identity?.email || null} desktopRequest={Boolean(desktopRequest)}
+  const desktopConsent = desktopRequest ? <DesktopConsent problem={desktopProblem} request={desktopDetails} confirmed={codeConfirmed} busy={Boolean(busy) || desktopConnecting} now={clock}
+    canConnect={claimableSeats.some(seat => seat.account_id === selectedAccountId)} onConfirm={setCodeConfirmed} onForget={forgetDesktop}
+    onConnect={replace => { const seat = claimableSeats.find(item => item.account_id === selectedAccountId); if (seat) connectDesktop(seat, replace); }} /> : undefined;
+
+  return <BillingJourney desktopConsent={desktopConsent} authTitle={authTitle} authContent={authContent} accountControl={accountControl} stage={stage} email={identity?.email || null} desktopRequest={Boolean(desktopRequest)}
     desktopConnected={desktopConnected} busy={Boolean(busy) || desktopConnecting} error={error} notice={notice}
     onRetryPayment={() => { setPaymentRecovery(false); setManageAccount(false); setPreparedCheckout(null); setError(""); setNotice(""); void refreshAccess(); }}
     signInAvailable={Boolean(identity)} onSignIn={signIn} onRefresh={refreshAccess}

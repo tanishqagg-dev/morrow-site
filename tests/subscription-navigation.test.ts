@@ -46,7 +46,7 @@ function invoiceFlow() {
     run: (_name: string, task: () => Promise<void>) => task().catch(setError),
   };
   const start = source.indexOf('const loadInvoices =');
-  const end = source.indexOf('\n  return <BillingJourney', start);
+  const end = source.indexOf('\n  const desktopConsent =', start);
   const compiled = ts.transpileModule(`${source.slice(start, end)}\nreturn loadInvoices;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
