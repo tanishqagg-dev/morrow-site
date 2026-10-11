@@ -1,9 +1,20 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
 import release from '@/lib/mac-release.json';
 import styles from '@/app/download/download.module.css';
 
+gsap.registerPlugin(useGSAP);
 export function MacDownload() {
+  const title = useRef<HTMLHeadingElement>(null);
+  useGSAP(() => {
+    const media = gsap.matchMedia();
+    media.add('(prefers-reduced-motion: no-preference)', () => {
+      gsap.from(title.current, { y: 12, clipPath: 'inset(0 0 100% 0)', duration: .9, ease: 'expo.out' });
+    });
+    return () => media.revert();
+  }, { scope: title });
   const [started, setStarted] = useState(false);
   const [message, setMessage] = useState('');
   const attempted = useRef(false);
@@ -30,9 +41,8 @@ export function MacDownload() {
     download();
   }, [download]);
   return <>
+    <h1 ref={title} className={styles.title}>{started ? 'Your download has started' : 'Download Morrow for Mac'}</h1>
     <p className={styles.meta}>Apple silicon · macOS 13 or later</p>
-    <h1 className={styles.title}>{started ? 'Your download has started' : 'Download Morrow for Mac'}</h1>
-    <p className={styles.downloadIntro}>A little setup. Then a lot less busywork.</p>
     <div className={styles.downloadActions}>
       {!started && <button className={styles.downloadButton} onClick={download}>Download for Mac ↓</button>}
       <p className={styles.downloadLinks}>{started && <>Download didn&apos;t start? <button className={styles.retry} onClick={download}>Try again</button><span aria-hidden="true"> · </span></>}<a href={release.zipDownloadUrl}>Download ZIP instead</a></p>

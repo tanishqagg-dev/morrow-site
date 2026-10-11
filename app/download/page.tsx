@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { DownloadTrialProvider, DownloadSteps, LegacySetupVideo } from '@/components/DownloadGuide';
+import { SiteHeader } from '@/components/SiteHeader';
+import { SiteFooter } from '@/components/SiteFooter';
 import { MacDownload } from '@/components/MacDownload';
 import styles from './download.module.css';
 
@@ -15,31 +17,25 @@ const fixes = [
 
 export default function DownloadPage() {
   return (
-    <DownloadTrialProvider><main id="main-content" className={styles.page}>
+    <DownloadTrialProvider><div className={styles.page}><SiteHeader activePage="download" /><main id="main-content">
       <section className={styles.top}>
         <div className={styles.wrap}>
-          <div className={styles.bar}>
-            <a href="/" aria-label="Morrow home"><img src="/wordmark-sm.png" width={360} height={120} alt="Morrow" /></a>
-            <a href="/subscribe?view=subscription">Manage your account ↗</a>
-          </div>
           <div className={styles.hero}><MacDownload /></div>
           <DownloadSteps />
           <p className={styles.note}>Computer control needs the official ChatGPT or Codex desktop app installed and running. In Morrow, use Settings &gt; Permissions to check the connection and allow the requested macOS access.</p>
         </div>
       </section>
 
-      <LegacySetupVideo />
 
       <section className={styles.help} aria-labelledby="help-title">
         <div className={styles.wrap}>
           <div className={styles.helpHead}>
-            <h2 className={styles.h2} id="help-title">Stuck? Start here.</h2>
-            <p>Common setup problems, each with a short video and the exact steps.</p>
+            <h2 className={styles.h2} id="help-title">A little help, if you need it.</h2>
+            <p>Choose the problem you are running into. The fix and video are inside.</p>
           </div>
           {fixes.map((f) => (
-            <article className={styles.fix} id={f.id} key={f.id}>
+            <details className={styles.fix} id={f.id} key={f.id}><summary>{f.title}<span aria-hidden="true">+</span></summary><div className={styles.fixContent}>
               <div>
-                <h3>{f.title}</h3>
                 <ol>{f.steps.map((s) => <li key={s}>{s}</li>)}</ol>
               </div>
               <div className={styles.small}>
@@ -48,18 +44,12 @@ export default function DownloadPage() {
                   Your browser can&apos;t play this video. <a href={`/media/${f.video}-720.mp4`}>Download it</a>.
                 </video>
               </div>
-            </article>
+            </div></details>
           ))}
+          <LegacySetupVideo />
         </div>
       </section>
 
-      <footer className={styles.foot}>
-        <div className={styles.wrap}>
-          <p>Downloading does not start billing. Full refund within 7 days of your first payment. ChatGPT usage requires your own compatible account and is separate.</p>
-          <p>Beta software may have bugs. Use Report a problem in Morrow or contact <a href="mailto:support@aestrum.in">support@aestrum.in</a>. Never send passwords or payment OTPs.</p>
-          <nav className={styles.legal} aria-label="Policies"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a><a href="/subscribe?view=subscription">Already subscribed? Manage your account</a></nav>
-        </div>
-      </footer>
-    </main></DownloadTrialProvider>
+    </main><div className={styles.foot}><SiteFooter /></div></div></DownloadTrialProvider>
   );
 }
