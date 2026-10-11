@@ -10,6 +10,7 @@ import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
+import { revokeConnectedMac, signOutEverywhere, type ConnectedMac } from "@/lib/connected-macs";
 import { clearDesktopRequest, resolveDesktopRequest, type StoredDesktopRequest } from "@/lib/desktop-storage";
 import { DesktopConsent } from "./DesktopConsent";
 import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consent";
@@ -156,6 +157,9 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     setInviteCode(provided || savedInvite);
 
   }, [identity?.userId]);
+  const [devices, setDevices] = useState<ConnectedMac[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [devicesError, setDevicesError] = useState("");
   const [invoices, setInvoices] = useState<Array<{id:string;number:string;status:string;amountPaise:number;paidAt:string|null;url:string|null}>>([]);
   const selectedAccountRef = useRef("");
   const refreshSequence = useRef(0);
@@ -637,6 +641,34 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const stage = subscriptionStage({ loadFailed: authTimedOut || snapshotFailed, loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
     hasPaidAccess, paymentPending, paymentRecovery, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
 
+  const loadDevices = useCallback(async () => {
+    const userId = activeUserId.current;
+    setDevicesLoading(true); setDevicesError("");
+    try {
+      const token = await authToken();
+      if (!userId || userId !== activeUserId.current) return;
+      const result = await billingRequest<{ devices: ConnectedMac[] }>("billing-customer", { action: "devices" }, token);
+      if (userId === activeUserId.current) setDevices(result.devices);
+    } catch (caught) { if (userId === activeUserId.current) setDevicesError(errorText(caught)); }
+    finally { if (userId === activeUserId.current) setDevicesLoading(false); }
+  }, [authToken]);
+  useEffect(() => { if (stage === "account" && signedIn) void loadDevices(); }, [stage, signedIn, loadDevices]);
+
+  const deviceMutation = async (body: object) => {
+    const userId = activeUserId.current;
+    const token = await authToken();
+    if (!userId || userId !== activeUserId.current) throw new Error("Sign in again to manage your Macs.");
+    return billingRequest("billing-customer", body, token);
+  };
+  const revokeMac = (device: ConnectedMac) => void run(`revoke-${device.installationId}`, async () => {
+    await revokeConnectedMac(device.installationId, deviceMutation); await loadDevices();
+    setNotice("This Mac has been signed out of Morrow.");
+  });
+  const signOutAll = () => void run("sign-out-everywhere", async () => {
+    if (!identity) return;
+    await signOutEverywhere(deviceMutation, async () => { forgetDesktop(); await identity.signOut(); });
+  });
+
   const assignSeat = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     void run("assign", async () => {
@@ -805,6 +837,18 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         <label className={styles.field}>Seats for next billing period<input type="number" min={2} max={100} value={seats} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>
         {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || seats === currentSubscription.quantity}>Update seats</button>}
       </details>}
+      <section className={styles.management} aria-labelledby="connected-macs-title">
+        <h2 id="connected-macs-title">Connected Macs</h2>
+        {devicesLoading && <p role="status">Loading your Macs…</p>}
+        {devicesError && <p role="alert">{devicesError} <button onClick={() => void loadDevices()} disabled={Boolean(busy)}>Try again</button></p>}
+        {!devicesLoading && !devicesError && devices.length === 0 && <p>No Macs are connected to this account.</p>}
+        {devices.map(device => <div className={styles.paymentRow} key={device.installationId}>
+          <div><strong>{device.deviceName || "Mac"}</strong><p>{device.accountName} · App version {device.appVersion || "unavailable"}</p><p>Last seen {device.lastSeenAt ? day(device.lastSeenAt) : "unavailable"}</p></div>
+          <button onClick={() => revokeMac(device)} disabled={Boolean(busy)} aria-label={`Revoke ${device.deviceName || "Mac"}`}>Revoke</button>
+        </div>)}
+        <p>Sign out everywhere disconnects all your Macs and signs you out of this account in every browser.</p>
+        <button className={styles.quietButton} onClick={signOutAll} disabled={Boolean(busy)}>Sign out everywhere</button>
+      </section>
       <p className={styles.paymentMethod}><strong>Payment method</strong>Morrow does not store your card or UPI details. Razorpay manages your AutoPay authorization.</p>
       <details className={styles.management} key={selectedAccountId} onToggle={event => { if (event.currentTarget.open && !busy) loadInvoices(); }}><summary>Payments and invoices</summary>
         {busy === "invoices" && <p role="status">Loading invoices…</p>}
