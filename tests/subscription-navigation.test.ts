@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { BillingDocuments } from '../components/BillingDocuments';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -15,7 +18,7 @@ test('subscription link opens management and account switches preserve the chose
     const context = { pendingKey: 'pending:user:account', URLSearchParams, window: { location: { search } },
       useEffect: (callback: () => void) => callback(), sessionStorage: { getItem: () => null }, parsePendingPayment: () => null,
       setManageAccount: (value: boolean) => { management = value; },
-      setConfirmCancel() {}, setError() {}, setNotice() {}, setPaymentPending() {}, setPaymentDesktopRequest() {},
+      setConfirmationTimedOut(){}, setConfirmedSubscriptionId(){}, setConflictingCheckout(){}, expiringRequest:{current:null}, setCheckoutExpiry(){}, pendingReceipt: { current: null }, checkoutFailure:{current:""},setCheckoutRecovery() {}, setPaymentRecovery() {}, setConfirmCancel() {}, setError() {}, setNotice() {}, setPaymentPending() {}, setPaymentDesktopRequest() {},
     };
     const marker = 'setManageAccount(new URLSearchParams(window.location.search).get("view") === "subscription");';
     const start = source.lastIndexOf('useEffect(() => {', source.indexOf(marker));
@@ -42,11 +45,11 @@ function invoiceFlow() {
   const bindings = { activeUserId: { current: 'qa-user' }, selectedAccountId: 'account-a',
     selectedAccountRef: { current: 'account-a' }, authToken,
     subscriptions: [{ id: 'sub-a', razorpay_subscription_id: 'gateway-sub-a' }],
-    invoices: [], billingRequest, setInvoices, setNotice, setError,
+    invoices: [], billingRequest, setInvoices, setReceipts: vi.fn(), setReceiptsStatus: vi.fn(), setNotice, setError,
     run: (_name: string, task: () => Promise<void>) => task().catch(setError),
   };
   const start = source.indexOf('const loadInvoices =');
-  const end = source.indexOf('\n  return <BillingJourney', start);
+  const end = source.indexOf('\n  const desktopConsent =', start);
   const compiled = ts.transpileModule(`${source.slice(start, end)}\nreturn loadInvoices;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -57,7 +60,7 @@ function invoiceFlow() {
 test('switching accounts clears old invoices before another account is displayed', () => {
   const setInvoices = vi.fn();
   runInNewContext(effectEnding('}, [selectedAccountId]);'), {
-    useEffect: (callback: () => void) => callback(), selectedAccountId: 'account-b', setInvoices,
+    useEffect: (callback: () => void) => callback(), selectedAccountId: 'account-b', setInvoices, setReceipts: vi.fn(), setReceiptsStatus: vi.fn(),
   });
   expect(setInvoices).toHaveBeenCalledWith([]);
 });
@@ -100,7 +103,7 @@ test('a rejected old-account invoice request does not show an error on the new a
 
 test('matching account invoices appear and signed-out requests are ignored', async () => {
   const flow = invoiceFlow();
-  flow.billingRequest.mockResolvedValue({ invoices: [{ id: 'invoice-a' }] });
+  flow.billingRequest.mockResolvedValue({ invoices: [{ id: 'invoice-a' }], receipts: [], receiptsStatus: 'available' });
   flow.load();
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
   expect(flow.setInvoices).toHaveBeenCalledWith([{ id: 'invoice-a' }]);
@@ -119,7 +122,7 @@ test('account refresh scopes recovery to the selected account and keeps initial 
     const bindings = { activeUserId: { current: 'qa-user' }, selectedAccountRef, refreshSequence: { current: 0 },
       authToken: async () => 'test-session', billingRequest,
       identityRef: { current: { email: 'qa@example.test' } },
-      setSnapshot: vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined,
+      desktopRequestRef: { current: "" }, setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setConflictingCheckout:vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined,
       useCallback: (callback: () => Promise<unknown>) => callback,
     };
     const start = source.indexOf('const refresh = useCallback');
@@ -133,4 +136,35 @@ test('account refresh scopes recovery to the selected account and keeps initial 
       action: 'snapshot', accountId: selectedAccount || undefined,
     }, 'test-session');
   }
+});
+
+test('an empty invoice response clears rows without creating a second empty-state notice', async () => {
+  const flow = invoiceFlow();
+  flow.billingRequest.mockResolvedValue({ invoices: [], receipts: [], receiptsStatus: 'available' });
+  flow.load();
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  expect(flow.setInvoices).toHaveBeenCalledWith([]);
+  expect(flow.setNotice).not.toHaveBeenCalled();
+});
+
+test('GST document loading includes ledger subscriptions and keeps receipt outages separate',async()=>{
+ const flow=invoiceFlow();
+ flow.subscriptions.push({id:'sub-b',razorpay_subscription_id:null as unknown as string});
+ flow.billingRequest.mockImplementation(async(_endpoint,body)=>body.subscriptionId==='sub-a'
+  ? {invoices:[{id:'tax-invoice'}],receipts:[{id:'gateway-receipt'}],receiptsStatus:'available'}
+  : {invoices:[{id:'credit-note'}],receipts:[],receiptsStatus:'unavailable'});
+ flow.load();
+ await vi.waitFor(()=>expect(flow.setInvoices).toHaveBeenCalledWith([{id:'tax-invoice'},{id:'credit-note'}]));
+ expect(flow.billingRequest).toHaveBeenCalledTimes(2);
+ expect(flow.setReceipts).toHaveBeenCalledWith([{id:'gateway-receipt'}]);
+ expect(flow.setReceiptsStatus).toHaveBeenCalledWith('unavailable');
+});
+
+test('BROWSER-02 loads and opens a payment receipt when the exact response has no tax invoices',async()=>{
+ const payload={invoices:[],receipts:[{id:'inv_test',status:'paid',amountPaise:11800,url:'https://rzp.io/qa-receipt'}],receiptsStatus:'available'};
+ const flow=invoiceFlow();flow.billingRequest.mockResolvedValue(payload);flow.load();
+ await vi.waitFor(()=>expect(flow.setReceipts).toHaveBeenCalledWith(payload.receipts));
+ expect(flow.setInvoices).toHaveBeenCalledWith([]);expect(flow.setReceiptsStatus).toHaveBeenCalledWith('available');
+ const html=renderToStaticMarkup(createElement(BillingDocuments,{invoices:flow.setInvoices.mock.lastCall![0],receipts:flow.setReceipts.mock.lastCall![0],receiptsStatus:flow.setReceiptsStatus.mock.lastCall![0],busy:false,loading:false,onPrint(){},onReload(){}}));
+ expect(html).toContain('<h4>Payment receipt</h4>');expect(html).toContain('href="https://rzp.io/qa-receipt"');expect(html).toContain('View receipt');expect(html).not.toContain('Print or save as PDF');
 });

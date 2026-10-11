@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { siteConfig } from "@/lib/site-config";
-import styles from "@/components/MorrowWebsite.module.css";
 
 export const metadata: Metadata = { title: "Refunds and cancellation", description: "Morrow's seven-day first-payment refund policy and how to cancel renewal." };
 export default function RefundsPage() {
-  return <div className={styles.site}><SiteHeader /><main id="main-content" className="subpage-main privacy-page">
+  return <div className="document-site"><SiteHeader /><main id="main-content" className="subpage-main privacy-page">
     <header><h1>Refunds and cancellation</h1><p>Effective 30 September 2026. Applies to the Morrow private paid beta, sold by {siteConfig.company.legalName} under the Aestrum brand.</p></header>
     <div className="privacy-content">
       <section><h2>Your first 7 days</h2><p>Request a full refund within 7 days (168 hours) of your first successful Morrow subscription payment. The refund covers the full amount paid, including GST. You do not need to give a reason. This window applies to your first payment, not each renewal.</p></section>

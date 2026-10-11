@@ -23,10 +23,11 @@ function flow(userId = "user-a") {
 }
 
 describe("subscription access without activation keys", () => {
-  it("connects the waiting Mac after a verified paid term appears", async () => {
-    const {connect,approveDesktop} = flow();
+  it("offers code consent after a verified paid term appears", async () => {
+    const {connect,approveDesktop,bindings} = flow();
     await connect(fixture(), "account-a", "user-a");
-    expect(approveDesktop).toHaveBeenCalledWith(expect.objectContaining({id:"seat-a"}),"user-a");
+    expect(approveDesktop).not.toHaveBeenCalled();
+    expect(bindings.setNotice).toHaveBeenCalledWith(expect.stringContaining("Enter the code shown in Morrow"));
   });
   it("does not unlock for a checkout callback without confirmed paid access", async () => {
     const {connect,approveDesktop} = flow();
@@ -44,11 +45,11 @@ describe("subscription access without activation keys", () => {
     await connect(other,"account-a","user-a");
     expect(approveDesktop).not.toHaveBeenCalled();
   });
-  it("keeps payment active when an expired desktop request needs a fresh sign-in", async () => {
+  it("keeps verified payment separate from desktop consent", async () => {
     const {connect,approveDesktop,bindings}=flow();
-    approveDesktop.mockRejectedValueOnce(new Error("Request expired"));
     await connect(fixture(),"account-a","user-a");
-    expect(bindings.setNotice).toHaveBeenCalledWith(expect.stringContaining("Your subscription is active"));
+    expect(bindings.setNotice).toHaveBeenCalledWith(expect.stringContaining("Your access is ready"));
+    expect(approveDesktop).not.toHaveBeenCalled();
   });
   it("removes manual key issuing and input from the customer and admin interfaces", () => {
     const admin=readFileSync(new URL("../components/OperatorConsole.tsx",import.meta.url),"utf8");

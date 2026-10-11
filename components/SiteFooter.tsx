@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { siteConfig } from "@/lib/site-config";
+import { siteConfig } from "../lib/site-config";
 
-export function SiteFooter() {
+export function SiteFooter({ compact = false }: { compact?: boolean } = {}) {
+  if (compact) return <footer className="account-footer"><a href="/">Morrow</a><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/refunds">Refunds</Link><a href={`mailto:${siteConfig.supportEmail}`}>Help</a></footer>;
   return (
     <footer className="site-footer">
       <div>
         <strong>morrow</strong>
-        <p>Make room for tomorrow.</p>
+        <p>भारत में बना</p>
       </div>
       <div className="footer-links">
+        <Link href="/subscribe?view=subscription">Your account</Link>
         <Link href="/privacy">Privacy</Link>
         <Link href="/terms">Terms</Link>
         <Link href="/refunds">Refunds</Link>

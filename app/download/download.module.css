@@ -1,56 +1,11 @@
-@font-face { font-family: Satoshi; src: url("/fonts/satoshi-500.woff2") format("woff2"); font-weight: 500; font-display: swap; }
-@font-face { font-family: Satoshi; src: url("/fonts/satoshi-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
-@font-face { font-family: Satoshi; src: url("/fonts/satoshi-900.woff2") format("woff2"); font-weight: 900; font-display: swap; }
+.page{background:#FFF;color:#0A0A0A;--muted:#525252;--line:#EBEBEB;--surface:#F5F5F5}.wrap{max-width:1120px;margin:auto;padding:0 40px}.top{padding:72px 0 64px}.hero{text-align:center;max-width:880px;margin:0 auto 48px}.title{font-size:clamp(56px,6.1vw,88px);line-height:1.02;letter-spacing:-.055em;font-weight:700;max-width:14ch;margin:0 auto 20px;text-wrap:balance}.meta{font-size:15px;color:var(--muted);margin:0 0 12px}.downloadIntro{font-size:19px;color:var(--muted);margin:0 0 24px}.downloadActions{font-size:14px}.downloadLinks{display:flex;align-items:baseline;flex-wrap:wrap;justify-content:center;gap:0 5px;margin:16px 0 4px}.downloadLinks a,.retry{text-decoration:underline;text-underline-offset:4px}.retry{border:0;background:transparent;padding:8px 0;color:inherit;font-size:14px}.downloadButton{border:0;border-radius:999px;background:#F5D33F;color:#0A0A0A;padding:14px 28px;min-height:52px;font-size:16px;font-weight:700}.downloadButton:hover{background:#0A0A0A;color:#FFF}.downloadStatus{color:var(--muted);margin:8px auto;max-width:48ch;font-size:14px}.checksum{max-width:600px;margin:0 auto;font-size:13px;color:var(--muted)}.checksum summary{display:list-item;width:max-content;margin:auto;min-height:40px;padding:8px}.checksum[open]{text-align:left;padding:16px 24px;border-radius:24px;background:#F5F5F5;margin-top:12px}.checksum p{margin:12px 0 4px}.checksum code{display:block;overflow-wrap:anywhere;font-size:12px}.installGuide{margin:0 auto}.installStage{padding:32px 64px 20px;background:#F5F5F5;border-radius:24px;position:relative;min-height:318px}.macWindow{max-width:720px;margin:auto;background:#FFF;border:1px solid #D4D4D4;border-radius:14px;overflow:hidden}.windowBar{height:42px;display:grid;grid-template-columns:80px 1fr 80px;align-items:center;text-align:center;background:#F5F5F5;border-bottom:1px solid #EBEBEB;font-size:13px;font-weight:700;color:#525252;padding:0 14px}.windowControls{display:flex;gap:7px}.windowControls i{display:block;width:10px;height:10px;border-radius:50%;background:#D4D4D4;border:1px solid #A3A3A3}.windowTools{text-align:right;font-weight:400;color:#737373}.dragScene{display:flex;justify-content:center;align-items:center;gap:clamp(28px,5vw,72px);height:216px}.appSource,.folderTarget{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;width:100px;font-size:14px;font-weight:500}.dragApp{position:relative;width:88px;height:88px;z-index:2}.dragApp img{width:88px;height:88px;object-fit:contain}.folderTarget>div{width:96px;height:88px}.dragArrow{width:72px;flex-shrink:0}.installPointer{position:absolute;bottom:-8px;right:-10px;width:24px;height:32px;opacity:0}.installComplete{position:absolute;bottom:-30px;font-size:12px;color:#525252;opacity:0;white-space:nowrap}.replay{display:block;margin:8px auto 0;min-height:32px;border:0;background:none;color:#525252;font-size:12px;padding:4px 12px}.replay:hover{text-decoration:underline}.openDisk{height:216px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}.drive{width:72px;height:80px}.openDisk strong{font-size:14px}.openDisk p{margin:0;color:#737373;font-size:13px}.appCapture{width:100%;height:216px;object-fit:contain;background:#FFF}.steps{list-style:none;margin:28px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}.steps button{display:flex;align-items:flex-start;gap:12px;text-align:left;border:0;background:none;padding:12px 8px;width:100%;min-height:90px;border-radius:12px;color:#0A0A0A}.steps button:hover{background:#F5F5F5}.stepNumber{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;border:1px solid #D4D4D4;flex-shrink:0;font-size:13px}.steps [aria-pressed=true] .stepNumber{background:#F5D33F;border-color:#F5D33F}.steps strong{font-size:16px;font-weight:700;display:block;margin-bottom:8px}.stepDescription{display:block;font-size:14px;color:#525252;line-height:1.5;max-width:26ch}.nextStep{border-top:1px solid #EBEBEB;margin-top:32px;padding-top:24px;display:flex;justify-content:space-between;align-items:center;gap:24px;font-size:16px}.nextStep p{margin:0}.nextStep p>span{margin:0 8px;color:#737373}.nextStep a{display:flex;align-items:center;gap:12px;font-weight:700;font-size:14px;min-height:44px}.nextStep a:hover{text-decoration:underline}.note{font-size:13px;color:#525252;line-height:1.6;max-width:85ch;margin:28px auto 0}.help{padding:88px 0 112px;border-top:1px solid #EBEBEB}.helpHead{margin-bottom:40px}.h2{font-size:clamp(32px,4vw,52px);line-height:1.08;letter-spacing:-.045em;font-weight:700;margin:0 0 16px;max-width:19ch}.helpHead p{font-size:17px;color:#525252;margin:0}.fix{border-top:1px solid #EBEBEB;scroll-margin-top:28px}.fix:last-child{border-bottom:1px solid #EBEBEB}.fix summary{display:flex;align-items:center;justify-content:space-between;gap:32px;padding:24px 0;min-height:80px;list-style:none;font-size:19px;font-weight:500}.fix summary::-webkit-details-marker{display:none}.fix summary>span{font-size:24px;font-weight:400}.fix[open] summary>span{transform:rotate(45deg)}.fix summary:hover{color:#525252}.fixContent{display:grid;grid-template-columns:1fr 1fr;gap:32px;padding:8px 0 40px}.fixContent ol{padding-left:20px;margin:0;color:#525252;font-size:16px}.fixContent li{margin-bottom:12px}.fixContent p{color:#525252}.small,.player{border-radius:24px;overflow:hidden;align-self:start;background:#0A0A0A}.small video,.player video{display:block;width:100%;height:auto;aspect-ratio:16/9}.fixContent>.note{grid-column:1/-1;margin:0}.foot{background:#0A0A0A;color:#FFF}.foot :global(.site-footer){border:0;color:#A3A3A3;padding-top:48px}.foot :global(.site-footer strong){color:#FFF}.foot :global(:focus-visible){outline-color:#FFF}
+@media(max-width:700px){.wrap{padding-inline:20px}.top{padding-top:48px;padding-bottom:48px}.hero{margin-bottom:32px}.title{font-size:50px;max-width:12ch;margin-bottom:20px}.meta{font-size:14px}.downloadIntro{font-size:17px;margin-bottom:20px}.downloadLinks{font-size:13px;max-width:30ch;margin:12px auto 0}.retry{font-size:13px}.checksum{font-size:12px}.installStage{padding:24px 16px 12px;min-height:240px}.windowBar{height:34px;font-size:11px;grid-template-columns:60px 1fr 60px;padding:0 10px}.windowControls{gap:5px}.windowControls i{width:8px;height:8px}.dragScene{gap:18px;height:164px}.dragApp,.dragApp img{width:60px;height:60px}.appSource,.folderTarget{width:78px;font-size:11px;gap:8px}.folderTarget>div{width:64px;height:60px}.dragArrow{width:36px}.installComplete{font-size:10px;bottom:-26px}.appCapture,.openDisk{height:164px}.drive{width:60px;height:65px}.steps{grid-template-columns:1fr;gap:4px;margin-top:20px}.steps button{min-height:76px;padding:12px 4px}.steps strong{font-size:16px;margin-bottom:4px}.stepDescription{max-width:34ch;font-size:14px}.nextStep{align-items:flex-start;flex-direction:column;gap:8px;margin-top:20px;padding-top:20px}.nextStep p{font-size:16px}.note{font-size:13px;margin-top:24px}.help{padding:56px 0 72px}.helpHead{margin-bottom:32px}.h2{font-size:36px}.helpHead p{font-size:16px}.fix summary{font-size:17px;gap:20px;padding:20px 0;min-height:76px}.fixContent{grid-template-columns:1fr;gap:24px;padding-bottom:28px}.fixContent ol{font-size:16px}.checksum[open]{padding:12px 16px}.steps .stepNumber{margin-top:1px}}
+@media(prefers-reduced-motion:reduce){.installStage *{animation:none!important;transition:none!important;transform:none!important}.installPointer,.installComplete,.replay{display:none}}
 
-.page { --yellow: #ffe34b; --muted: #575757; --line: #e5e5e5; background: #fff; color: #000; font: 500 17px/1.55 Satoshi, -apple-system, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
-.page a { color: inherit; }
-.wrap { max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 56px); }
+.dragApp{position:absolute;top:0;left:6px}.sourceIcon{width:88px;height:88px;object-fit:contain}.installPointer{bottom:auto;top:64px;right:0}
+@media(max-width:700px){.dragApp{left:9px}.sourceIcon{width:60px;height:60px}.installPointer{top:42px;right:-1px}}
 
-.top { background: var(--yellow); padding: 34px 0 0; }
-.bar { display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
-.bar img { width: 118px; height: auto; }
-.bar a { font-weight: 700; text-decoration: none; }
-.hero { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: clamp(30px, 5vw, 80px); align-items: end; padding: clamp(60px, 8vw, 110px) 0 clamp(40px, 5vw, 64px); }
-.meta { font-size: 14px; font-weight: 700; margin: 0 0 18px; }
-.title { font-weight: 900; font-size: clamp(3rem, 8vw, 7.5rem); line-height: 0.92; letter-spacing: -0.045em; margin: 0; }
-.side p { margin: 0 0 22px; font-size: 18px; }
-.side :global(.button) { background: #000; color: #fff; min-height: 54px; padding: 0 28px; font-size: 16px; font-weight: 700; }
-.side :global(.button:hover) { transform: none; }
-.side :global(p[role="status"]) { font-size: 14px; margin-top: 12px; }
-.side :global(details) { font-size: 13px; }
-.steps { list-style: none; counter-reset: s; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 0; padding: 0 0 54px; }
-.steps li { counter-increment: s; border-top: 2px solid #000; padding-top: 14px; font-size: 15.5px; }
-.steps li::before { content: "Step " counter(s); display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+@media(min-width:701px){.top{padding-top:48px}.hero{margin-bottom:32px}.title{font-size:80px}.dragScene,.openDisk,.appCapture{height:190px}.installStage{padding-top:24px;padding-bottom:16px}.installStage{min-height:310px}}
 
-.setup { padding: clamp(70px, 9vw, 120px) 0 clamp(40px, 5vw, 70px); }
-.h2 { font-weight: 900; font-size: clamp(2.2rem, 5vw, 4.4rem); line-height: 0.95; letter-spacing: -0.04em; margin: 0 0 26px; }
-.player { border-radius: 26px; overflow: hidden; background: #000; }
-.player video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
-.note { font-size: 12.5px; color: var(--muted); margin: 14px 0 0; }
-
-.help { padding: clamp(50px, 7vw, 100px) 0; border-top: 1px solid var(--line); }
-.helpHead { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 40px; }
-.helpHead p { margin: 0; max-width: 28em; color: var(--muted); }
-.fix { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: clamp(24px, 4vw, 60px); padding: 40px 0; border-top: 2px solid #000; scroll-margin-top: 30px; }
-.fix h3 { font-weight: 700; font-size: clamp(1.4rem, 2.2vw, 2rem); line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 14px; }
-.fix ol { margin: 0; padding-left: 20px; color: #262626; }
-.fix li { margin-bottom: 8px; }
-.fix .small { border-radius: 20px; overflow: hidden; background: #000; }
-.fix video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
-
-.foot { background: #000; color: #fff; padding: 46px 0 40px; }
-.foot p { margin: 0 0 12px; color: #cfcfcf; max-width: 46em; }
-.foot a { text-decoration: underline; }
-.legal { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; margin-top: 22px; }
-
-.page :focus-visible { outline: 3px solid #000; outline-offset: 4px; border-radius: 6px; }
-.foot :focus-visible { outline-color: #fff; }
-
-@media (max-width: 900px) {
-  .hero, .fix { grid-template-columns: 1fr; }
-  .steps { grid-template-columns: 1fr 1fr; }
-  .helpHead { flex-direction: column; align-items: flex-start; }
-}
-@media (max-width: 560px) {
-  .steps { grid-template-columns: 1fr; }
-}
+.appCapture{height:360px;object-fit:cover}
+@media(max-width:700px){.appCapture{height:220px}}

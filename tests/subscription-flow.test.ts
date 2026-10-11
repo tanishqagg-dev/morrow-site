@@ -6,6 +6,11 @@ import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay } fr
 import type { BillingSnapshot } from "../lib/billing";
 const base = { loaded:true, signedIn:true, snapshotLoaded:true, hasPaidAccess:false, paymentPending:false, manageAccount:false };
 describe("guided subscription journey", () => {
+  it("ends failed loading without offering checkout and recovers when an account arrives", () => {
+    expect(subscriptionStage({...base,loaded:false,loadFailed:true})).toBe("unavailable");
+    expect(subscriptionStage({...base,snapshotLoaded:false,loadFailed:true})).toBe("unavailable");
+    expect(subscriptionStage({...base,loadFailed:true,hasPaidAccess:true})).toBe("ready");
+  });
   it("backs off delayed payments without exhausting the 120-per-hour status limit", () => {
     let elapsed = 1500, requests = 0;
     while (elapsed < 3_600_000) elapsed += paymentPollDelay(requests++);
@@ -46,6 +51,14 @@ describe("guided subscription journey", () => {
 const props={stage:"sign-in" as const,email:null,desktopRequest:false,desktopConnected:false,busy:false,error:"",notice:"",signInAvailable:true,canConnect:false,
   onSignIn:()=>{},onSignOut:()=>{},onRefresh:()=>{},onAccount:()=>{},onBack:()=>{},onConnect:()=>{}};
 describe("subscription screen boundaries",()=>{
+  it("failed loading shows recovery instead of an endless spinner or purchase action",()=>{
+    const html=renderToStaticMarkup(createElement(BillingJourney,{...props,stage:"unavailable"}));
+    expect(html).toContain("Try again");
+    expect(html).toContain("before starting another payment");
+    expect(html).not.toContain('aria-busy="true"');
+    expect(html).not.toContain("Getting your account ready");
+    expect(html).not.toContain("Sign in or create account");
+  });
   it("shows one sign-in action without a purchase form",()=>{
     const html=renderToStaticMarkup(createElement(BillingJourney,props));
     expect(html).toContain("Sign in or create account");
@@ -62,8 +75,8 @@ describe("subscription screen boundaries",()=>{
     expect(html).not.toContain(">Open Morrow");
     expect(html).toContain("Check access again");
     const connected=renderToStaticMarkup(createElement(BillingJourney,{...props,stage:"ready",desktopRequest:true,canConnect:true,desktopConnected:true}));
-    expect(connected).toContain("You can close this page");
-    expect(connected).not.toContain(">Open Morrow");
+    expect(connected).toContain("You can close this tab");
+    expect(connected).toContain('href="morrow://auth-complete"');
     expect(connected).toContain("Manage subscription");
   });
 });

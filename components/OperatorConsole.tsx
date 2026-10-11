@@ -204,7 +204,7 @@ export function OperatorConsole() {
     const { data, error } = await client.auth.mfa.enroll({
       factorType: "totp",
       friendlyName: "Morrow operations",
-      issuer: "Skills4U Aestrum",
+      issuer: "Morrow",
     });
     if (scope !== authGeneration.current) return;
     setBusy(false);

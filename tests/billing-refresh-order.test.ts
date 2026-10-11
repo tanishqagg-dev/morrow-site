@@ -7,7 +7,7 @@ function portal() {
   const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
   const bindings = { refreshSequence: { current: 0 }, activeUserId: { current: 'qa-user' }, selectedAccountRef: { current: 'account-a' },
     authToken: vi.fn(async () => 'test-session'), billingRequest: vi.fn(), identityRef: { current: { email: 'qa@example.test' } },
-    setSnapshot: vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined, useCallback: (fn: unknown) => fn };
+    desktopRequestRef: { current: "" }, setSnapshotFailed: vi.fn(), setSnapshot: vi.fn(), setConflictingCheckout:vi.fn(), setSelectedAccountId: vi.fn(), paidSeatForAccount: () => undefined, useCallback: (fn: unknown) => fn };
   const start = source.indexOf('const refresh = useCallback');
   const end = source.indexOf('}, [authToken]);', start) + '}, [authToken]);'.length;
   const code = ts.transpileModule(source.slice(start, end) + '\nreturn refresh;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -33,5 +33,15 @@ describe('snapshot response ordering', () => {
     const flow = portal(); const old = deferred<unknown>(); flow.billingRequest.mockReturnValueOnce(old.promise).mockResolvedValueOnce(paid);
     const first = flow.refresh(); await Promise.resolve(); await flow.refresh(); old.reject(new Error('stale outage'));
     await expect(first).resolves.toBeUndefined(); expect(flow.setSnapshot).toHaveBeenLastCalledWith(paid);
+    expect(flow.setSnapshotFailed).not.toHaveBeenCalledWith(true);
+  });
+  it('marks a current snapshot failure and clears it when a retry succeeds', async () => {
+    const flow = portal();
+    flow.billingRequest.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(paid);
+    await expect(flow.refresh()).rejects.toThrow('offline');
+    expect(flow.setSnapshotFailed).toHaveBeenLastCalledWith(true);
+    await flow.refresh();
+    expect(flow.setSnapshotFailed).toHaveBeenLastCalledWith(false);
+    expect(flow.setSnapshot).toHaveBeenLastCalledWith(paid);
   });
 });

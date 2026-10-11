@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatActivationCodeInput, normalizeActivationCode } from "../lib/activation-code";
 
-describe("Aestrum activation codes", () => {
+describe("Morrow activation codes", () => {
   it("formats pasted codes into the canonical five-character groups", () => {
     expect(formatActivationCodeInput("j4u-abcde-fghjk-mnpqr-stuvw")).toBe("J4U-ABCDE-FGHJK-MNPQR-STUVW");
   });

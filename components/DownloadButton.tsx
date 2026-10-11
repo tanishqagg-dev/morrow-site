@@ -7,8 +7,8 @@ type DownloadButtonProps = {
 
 export function DownloadButton({ className = "", compact = false }: DownloadButtonProps) {
   return (
-    <a className={`button button-primary ${className}`} href="/activate">
-      <span>{compact ? "Get access" : "Get pilot access"}</span>
+    <a className={`button button-primary ${className}`} href="/download?start=1">
+      <span>{compact ? "Download" : "Download for Mac"}</span>
       <ArrowRight aria-hidden="true" weight="bold" />
     </a>
   );
