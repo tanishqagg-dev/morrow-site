@@ -76,9 +76,9 @@ export function AestrumCharacter({
       <svg viewBox="0 0 400 400" aria-hidden="true" focusable="false">
         <defs>
           <linearGradient id="aestrum-demo-ink" x1="18%" y1="8%" x2="78%" y2="92%">
-            <stop offset="0" stopColor="#292D38" />
-            <stop offset=".44" stopColor="#0B0D12" />
-            <stop offset="1" stopColor="#030408" />
+            <stop offset="0" stopColor="#2f2f2f" />
+            <stop offset=".44" stopColor="#0e0e0e" />
+            <stop offset="1" stopColor="#050505" />
           </linearGradient>
         </defs>
         <g className="aestrum-demo-orbit">

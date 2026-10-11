@@ -21,7 +21,7 @@ type Snapshot = { role: "owner" | "operator" | "auditor"; gateway: { mode: "test
 type Tab = "overview" | "plans" | "coupons" | "customers" | "payments" | "audit";
 
 function date(value: string | null) {
-  return value ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value)) : "—";
+  return value ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(value)) : "Not available";
 }
 
 function errorText(error: unknown) { return error instanceof Error ? error.message : "Could not complete the action."; }

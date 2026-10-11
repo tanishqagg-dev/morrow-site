@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { siteConfig } from "@/lib/site-config";
-import styles from "@/components/MorrowWebsite.module.css";
 
 export const metadata: Metadata = {
   title: "Terms of service",
@@ -13,7 +12,7 @@ const email = siteConfig.supportEmail;
 
 export default function TermsPage() {
   return (
-    <div className={styles.site}>
+    <div className="document-site">
       <SiteHeader />
       <main id="main-content" className="subpage-main privacy-page">
         <header>

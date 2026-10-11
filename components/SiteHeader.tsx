@@ -1,24 +1,25 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 type SiteHeaderProps = {
-  activePage?: "activate" | "subscribe";
+  accountControl?: ReactNode;
+  activePage?: "activate" | "subscribe" | "download";
 };
 
-export function SiteHeader({ activePage }: SiteHeaderProps) {
+export function SiteHeader({ activePage, accountControl }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
         <a className="brand-lockup" href="/" aria-label="Morrow home">
           <img src="/morrow/wordmark.png" alt="morrow" width="138" height="46" style={{objectFit: "contain"}} />
         </a>
-        <nav className="main-nav" aria-label="Primary navigation">
-          <a href="/#say-it">Experience</a>
-          <a href="/#pricing">Pricing</a>
-          <a href="/#film">How it works</a>
-          <Link href="/privacy">Privacy</Link>
-          <Link href="/subscribe" aria-current={activePage === "subscribe" ? "page" : undefined}>Your account</Link>
+        {accountControl === undefined ? <><nav className="main-nav" aria-label="Primary navigation">
+          <a href="/download">Download</a>
+          <Link href="/contact">Help</Link>
+          {activePage !== "download" && <Link href="/subscribe" aria-current={activePage === "subscribe" ? "page" : undefined}>Your account</Link>}
         </nav>
-        <a className="button button-quiet" href="/download?start=1">Download for Mac</a>
+        <a className={`button ${activePage === "download" ? "button-quiet" : "button-primary"}`} href={activePage === "download" ? "/subscribe?view=subscription" : "/download?start=1"}>{activePage === "download" ? "Your account" : "Download for Mac"}</a>
+        </> : <div className="account-header-control">{accountControl}</div>}
       </div>
     </header>
   );

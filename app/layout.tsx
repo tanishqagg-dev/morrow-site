@@ -8,12 +8,12 @@ export const metadata: Metadata = {
     template: "%s | Morrow",
   },
   description:
-    "Meet Morrow, a voice-first Mac workspace for files and actions in supported apps. Connect your ChatGPT account and book a personal demo.",
+    "Meet Morrow, a voice-first Mac workspace for files and actions in supported apps. Connect your ChatGPT account and download Morrow for Mac.",
   applicationName: "Morrow",
   appleWebApp: { capable: true, title: "Morrow" },
   openGraph: {
     title: "Morrow | You say it. Your Mac gets to work.",
-    description: "Your voice, your files, and work ready to review. Meet Morrow in a personal demo.",
+    description: "Your voice, your files, and work ready to review. Download Morrow for Mac.",
     type: "website",
   },
   robots: { index: true, follow: true },
@@ -22,8 +22,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "light",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffe34b" },
-    { media: "(prefers-color-scheme: dark)", color: "#ffe34b" },
+    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
+    { media: "(prefers-color-scheme: dark)", color: "#FFFFFF" },
   ],
 };
 

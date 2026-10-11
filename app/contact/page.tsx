@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { siteConfig } from "@/lib/site-config";
-import styles from "@/components/MorrowWebsite.module.css";
 
 export const metadata: Metadata = {
   title: "Contact",
@@ -20,7 +19,7 @@ const team = [
 
 export default function ContactPage() {
   return (
-    <div className={styles.site}>
+    <div className="document-site">
       <SiteHeader />
       <main id="main-content" className="subpage-main privacy-page">
         <header>
@@ -39,8 +38,8 @@ export default function ContactPage() {
             </ul>
           </section>
           <section>
-            <h2>Join the beta</h2>
-            <p>Morrow is in a private paid beta. An invitation is required to subscribe. <a href="/#beta">Join the waitlist</a> or ask for a personal demo from the same form.</p>
+            <h2>Get Morrow</h2>
+            <p><a href="/download?start=1">Download for Mac</a>, then open Morrow to create your account. Your plan and any invitation requirement appear during checkout.</p>
           </section>
         </div>
       </main>
