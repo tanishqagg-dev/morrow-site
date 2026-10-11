@@ -24,6 +24,7 @@ import { CheckoutRecovery } from "./CheckoutRecovery";
 import { abandonCheckout, type CheckoutRecoveryState } from "@/lib/checkout-recovery";
 import { checkoutMethods, checkoutMethodConfig } from "@/lib/checkout-method";
 import { loadCheckoutQuote, assertCheckoutPrice, type CheckoutQuote } from "@/lib/checkout-quote";
+import { seatQuantityForQuote } from "@/lib/seat-quote-limit";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -185,6 +186,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const selectedAccountRef = useRef("");
   const refreshSequence = useRef(0);
   const [checkoutQuote, setCheckoutQuote] = useState<{context:string;quote:CheckoutQuote}|null>(null);
+  const [quantityLimit, setQuantityLimit] = useState<{context:string;maximum:number}|null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [quoteRevision, setQuoteRevision] = useState(0);
   const quoteQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -361,6 +363,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     return () => { cancelled = true; };
   }, [signedIn, identity?.userId, refresh]);
 
+  const currentSubscription = currentSubscriptionForAccount(snapshot, selectedAccountId);
   const activePlan = plans.find((plan) => plan.audience === audience && plan.period === period);
   const monthlyAvailable = plans.some((plan) => plan.audience === audience && plan.period === "monthly");
   const yearlyAvailable = plans.some((plan) => plan.audience === audience && plan.period === "yearly");
@@ -375,7 +378,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const couponContext = `${identity?.userId}:${selectedAccountId}:${activePlan?.id}:${seats}:${audience}:${period}`;
   const appliedCoupon = coupon?.context === couponContext ? coupon : null;
   const availablePaymentMethods = checkoutMethods(appliedCoupon);
-  const quoteContext = `${couponContext}:${appliedCoupon?.code || ""}:${businessInvoice}:${JSON.stringify(invoiceDetails)}`;
+  const quotePlan = manageAccount && currentSubscription ? plans.find(plan => plan.id === currentSubscription.plan_id) : activePlan;
+  const quantityLimitContext = `${identity?.userId}:${selectedAccountId}:${quotePlan?.id}:${appliedCoupon?.code || ""}:${businessInvoice}:${JSON.stringify(invoiceDetails)}`;
+  const maximumQuantity = quantityLimit?.context === quantityLimitContext ? quantityLimit.maximum : undefined;
+  const quoteContext = `${quotePlan?.id}:${couponContext}:${appliedCoupon?.code || ""}:${businessInvoice}:${JSON.stringify(invoiceDetails)}`;
   const serverQuote = checkoutQuote?.context === quoteContext && pendingReceipt.current?.checkout?.priceConfirmed !== false ? checkoutQuote.quote : null;
   const quote = serverQuote?.baseAmountPaise ?? 0;
   const gst = serverQuote?.gstAmountPaise ?? 0;
@@ -399,12 +405,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   useEffect(() => { if (selectedAccount) setAudience(selectedAccount.kind); }, [selectedAccount?.kind]);
   const subscriptions = useMemo(() => (snapshot?.subscriptions || []).filter((subscription) =>
     subscription.account_id === selectedAccountId), [snapshot, selectedAccountId]);
-  const currentSubscription = currentSubscriptionForAccount(snapshot, selectedAccountId);
   const subscriptionNeedsRecovery = Boolean(currentSubscription && ["pending", "halted", "paused"].includes(currentSubscription.status));
   const matchingAccount = selectedAccount?.kind === audience;
   const hasPaidAccess = Boolean(currentSubscription?.paid_until && new Date(currentSubscription.paid_until).getTime() > clock);
   useEffect(() => {
-    if (!signedIn || !matchingAccount || !activePlan || pendingReceipt.current || appliedCoupon?.duration === "fixed" || (couponCode.trim() && !appliedCoupon)) return;
+    if (!signedIn || !matchingAccount || !quotePlan || (hasPaidAccess && (!manageAccount || audience !== "company" || !currentSubscription || quantityChangeEligibility(currentSubscription) !== "allowed")) || pendingReceipt.current || appliedCoupon?.duration === "fixed" || (couponCode.trim() && !appliedCoupon)) return;
     let invoiceProfile;
     try { invoiceProfile = invoiceProfileForCheckout(businessInvoice, invoiceDetails); }
     catch { setQuoteError("Complete your billing details to see the exact checkout price."); return; }
@@ -418,12 +423,12 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         const token = await authToken();
         if (!stillCurrent()) return;
         const result = await loadCheckoutQuote(body => billingRequest("billing-customer", body, token),
-          {accountId,planId:activePlan.id,quantity:billedSeats,...(appliedCoupon ? {couponCode:appliedCoupon.code} : {})}, invoiceProfile, stillCurrent);
-        if (result && stillCurrent()) setCheckoutQuote({context:quoteContext,quote:result});
+          {accountId,planId:quotePlan.id,quantity:billedSeats,...(appliedCoupon ? {couponCode:appliedCoupon.code} : {})}, invoiceProfile, stillCurrent);
+        if (result && stillCurrent()) { setCheckoutQuote({context:quoteContext,quote:result}); setQuantityLimit({context:quantityLimitContext,maximum:result.maximumQuantity}); }
       }).catch(caught => { if (stillCurrent()) setQuoteError(errorText(caught)); });
     }, 350);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [signedIn,matchingAccount,activePlan?.id,quoteContext,quoteRevision,hasPaidAccess,paymentPending,checkoutRecovery,authToken]);
+  }, [signedIn,matchingAccount,quotePlan?.id,quoteContext,quantityLimitContext,quoteRevision,hasPaidAccess,manageAccount,paymentPending,checkoutRecovery,authToken]);
   const accountSeats = (snapshot?.seats || []).filter((seat) => seat.account_id === selectedAccountId);
   const paidAccountIds = new Set((snapshot?.subscriptions || [])
     .filter((subscription) => subscription.paid_until && new Date(subscription.paid_until).getTime() > Date.now())
@@ -855,6 +860,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     void run(action, async () => {
       if (!signedIn) throw new Error("Sign in first.");
       if (action === "change_quantity" && quantityChangeEligibility(subscription) !== "allowed") throw new Error("Refresh your subscription to check whether seat changes are available.");
+      if (action === "change_quantity" && (!maximumQuantity || !serverQuote || !nextQuantity || nextQuantity > maximumQuantity)) throw new Error("Refresh the seat quote before changing your quantity.");
       if (action === "cancel") setCancelRetryId(null);
       try {
         await sensitiveMutation({ action, subscriptionId: subscription.id,
@@ -952,7 +958,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           <li><CheckCircle aria-hidden="true" />Work with files and connected apps</li>
           <li><CheckCircle aria-hidden="true" />{trialEligible ? "Your ChatGPT subscription is separate" : "Manage your subscription from your account"}</li>
         </ul>}
-        {audience === "company" && <label className={styles.field}>Seats<input type="number" min={2} max={100} value={seats} disabled={Boolean(busy) || checkoutOpen} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>}
+        {audience === "company" && <label className={styles.field}>Seats<input type="number" min={2} max={maximumQuantity} value={seats} disabled={Boolean(busy) || checkoutOpen || !maximumQuantity} onChange={(event) => setSeats(seatQuantityForQuote(event.target.value, 2, maximumQuantity))} /></label>}
             {!trialEligible && <dl className={styles.total}>
           <div><dt>Plan</dt><dd>{appliedCoupon?.duration === "fixed" ? "₹0" : serverQuote ? rupees(quote) : "Unavailable"}</dd></div>
           {appliedCoupon?.duration !== "fixed" && <div><dt>GST</dt><dd>{serverQuote ? rupees(gst) : "Unavailable"}</dd></div>}
@@ -1038,8 +1044,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       {selectedAccount?.kind === "company" && <details className={styles.management}><summary>Manage team seats</summary>
         <form onSubmit={assignSeat}><label className={styles.field}>Email<input type="email" value={seatEmail} onChange={(event) => setSeatEmail(event.target.value)} placeholder="name@company.com" required /></label><button disabled={Boolean(busy) || !hasPaidAccess}>Assign seat</button></form>
         {accountSeats.map((seat) => <div className={styles.paymentRow} key={seat.id}><span>{seat.email}</span><button onClick={() => removeSeat(seat)} disabled={Boolean(busy)}>Remove</button></div>)}
-        {currentSubscription && quantityChangeEligibility(currentSubscription) === "allowed" && <><label className={styles.field}>Seats for next billing period<input type="number" min={2} max={100} value={seats} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>
-        {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || seats === currentSubscription.quantity}>Update seats</button>}</>}
+        {currentSubscription && quantityChangeEligibility(currentSubscription) === "allowed" && <>
+        {!invoiceDetails.stateCode && <label className={styles.field}>Your state<select aria-label="Your state" value={invoiceDetails.stateCode} onChange={event => setInvoiceDetails({...invoiceDetails,stateCode:event.target.value})}><option value="">Choose your state</option>{gstStates.map(([code,name]) => <option key={code} value={code}>{name} ({code})</option>)}</select></label>}
+        {!maximumQuantity && <p role="status">{quoteError || "Confirming the seat limit…"} {quoteError && <button onClick={() => setQuoteRevision(value => value + 1)} disabled={Boolean(busy)}>Refresh quote</button>}</p>}
+        <label className={styles.field}>Seats for next billing period<input type="number" min={2} max={maximumQuantity} value={seats} disabled={Boolean(busy) || !maximumQuantity} onChange={(event) => setSeats(seatQuantityForQuote(event.target.value, 2, maximumQuantity))} /></label>
+        {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || !maximumQuantity || !serverQuote || seats === currentSubscription.quantity}>Update seats</button>}</>}
         {currentSubscription && quantityChangeEligibility(currentSubscription) === "unknown" && <p>Your payment method has not been confirmed. <button onClick={refreshAccess} disabled={Boolean(busy)}>Refresh subscription</button></p>}
         {currentSubscription && quantityChangeEligibility(currentSubscription) === "unsupported" && <p>UPI, eNACH and netbanking subscriptions cannot change their seat count. Contact support if your team needs a different plan.</p>}
         {currentSubscription && quantityChangeEligibility(currentSubscription) === "state" && <p>Seat changes are available when a card subscription is authenticated or active.</p>}
