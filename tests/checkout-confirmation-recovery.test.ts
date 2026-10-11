@@ -4,12 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
+import {checkoutMethods,checkoutMethodConfig} from '../lib/checkout-method';
 import { invoiceProfileForCheckout, invoiceRecipientNameForCheckout } from '../lib/invoice-profile';
 import { BillingError, parseCheckoutReply, parsePendingPayment, type BillingSnapshot } from '../lib/billing';
 import { trialAuthorizationExpired, pendingPaymentOutcome, PAYMENT_CONFIRMATION_TIMEOUT_MS, subscriptionStage } from '../lib/subscription-flow';
 const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
 const now = Date.now();
-const reply = () => parseCheckoutReply({ subscriptionId: 'sub-new', keyId: 'key', email: 'me@example.com', name: 'Me', trialEndsAt: new Date(now + 7 * 86400_000).toISOString() });
+const reply = () => parseCheckoutReply({ subscriptionId: 'sub-new', keyId: 'key', paymentMethod:'upi', email: 'me@example.com', name: 'Me', trialEndsAt: new Date(now + 7 * 86400_000).toISOString() });
 function execute(start: string, end: string, suffix: string, bindings: Record<string, unknown>) {
   const begin = source.indexOf(start);
   const code = ts.transpileModule(source.slice(begin, source.indexOf(end, begin)) + suffix, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -24,7 +25,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
     invoiceRecipientName: "QA Buyer", invoiceRecipientNameForCheckout, businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
     inviteAccepted: true, activePlan: { id: 'plan' }, audience: 'personal', seats: 1, period: 'monthly',
-    couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
+    checkoutMethodConfig, availablePaymentMethods:checkoutMethods(null), couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
     prepared, preparedCheckout: { preparedAt, requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, trialAuthorizationExpired, PAYMENT_CONFIRMATION_TIMEOUT_MS, parseCheckoutReply, BillingError,
     crypto: { randomUUID: vi.fn(() => `request-${Math.random()}`) }, authToken: async () => 'token',
     billingRequest: vi.fn(async (_endpoint, payload) => payload.action === 'checkout' ? reply() : {}),
@@ -228,4 +229,11 @@ it('BROWSER-03 Resume reopens the saved subscription without a fresh checkout or
  await flow.start(true);
  expect(flow.open).toHaveBeenCalledOnce(); expect(flow.billingRequest).not.toHaveBeenCalled();
  expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true,'sub-new',expect.objectContaining({requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',checkout:{reply:saved,preparedAt:now}}));
+});
+it('RZP-10 sends the selected method on ordinary checkout and restricts the provider UI', async()=>{
+ let options: {config:ReturnType<typeof checkoutMethodConfig>} | undefined;
+ const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{trialEligible:false,couponPaymentMethod:'card',window:{Razorpay:class {constructor(value:typeof options){options=value;}open(){}on(){}}},billingRequest:vi.fn(async(_endpoint,body)=>body.action==='checkout'?{...reply(),paymentMethod:'card'}:{})});
+ await flow.start();
+ expect(flow.billingRequest.mock.calls.find(([,body])=>body.action==='checkout')?.[1]).toMatchObject({paymentMethod:'card'});
+ expect(options?.config.display.blocks.selected.instruments).toEqual([{method:'card'}]);
 });

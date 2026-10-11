@@ -22,6 +22,7 @@ import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consen
 import { quantityChangeEligibility } from "@/lib/subscription-quantity";
 import { CheckoutRecovery } from "./CheckoutRecovery";
 import { abandonCheckout, type CheckoutRecoveryState } from "@/lib/checkout-recovery";
+import { checkoutMethods, checkoutMethodConfig } from "@/lib/checkout-method";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -368,6 +369,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   }, [catalogState, activePlan, plans, audience]);
   const couponContext = `${identity?.userId}:${selectedAccountId}:${activePlan?.id}:${seats}:${audience}:${period}`;
   const appliedCoupon = coupon?.context === couponContext ? coupon : null;
+  const availablePaymentMethods = checkoutMethods(appliedCoupon);
   const gstBenefit = Boolean(businessInvoice && activePlan?.gstDiscountAvailable && !appliedCoupon);
   const gstBenefitTotal = activePlan?.amountPaise ?? 0;
   const gstBenefitBase = gstBenefitTotal - Math.round(gstBenefitTotal * 18 / 118);
@@ -381,7 +383,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const renewalPeriod = period === "yearly" ? "year" : "month";
   const firstPaymentTerms = appliedCoupon?.duration === "first_cycle" ? `First payment only. Then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod} including GST.` : "";
   const trialEligible = Boolean(trialConfig.enabled && snapshot?.trial?.enabled && snapshot.trial.eligible && !trialDeclined && audience === "personal" && period === "monthly" && !appliedCoupon && !businessInvoice);
-  const checkoutContext = `${couponContext}:${inviteCode}:${businessInvoice}:${JSON.stringify(invoiceDetails)}:${invoiceRecipientName}:${trialEligible}`;
+  const checkoutContext = `${couponContext}:${inviteCode}:${businessInvoice}:${JSON.stringify(invoiceDetails)}:${invoiceRecipientName}:${trialEligible}:${couponPaymentMethod}`;
   const prepared = preparedCheckout?.context === checkoutContext ? preparedCheckout.reply : null;
   const trialEndsAt = prepared?.trialEndsAt || (snapshot?.subscriptions || []).find(sub => sub.account_id === selectedAccountId && sub.status === "created")?.trial_ends_at || null;
   const billedSeats = audience === "company" ? seats : 1;
@@ -445,7 +447,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         quantity: billedSeats, couponCode: couponCode.trim(),
       }, await authToken());
       setCoupon({ ...result, context: couponContext });
-      setCouponPaymentMethod(result.paymentMethods?.[0] || "upi");
+      if (result.duration === "first_cycle" && result.paymentMethods?.[0]) setCouponPaymentMethod(result.paymentMethods[0]);
       setNotice(result.duration === "fixed" ? `Admin coupon applied: ${result.accessDays} days of access. It will not renew.` : result.duration === "first_cycle" ? `First payment ${rupees(result.chargeAmountPaise!)} including GST. Then ${rupees(result.renewalAmountPaise!)} per ${renewalPeriod} including GST until cancelled.` : "Coupon applied. This price continues for the life of this subscription.");
     });
   };
@@ -503,6 +505,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (!activePlan) throw new Error("Choose a published plan first.");
     if (selectedAccount.kind !== audience) throw new Error("Select a matching personal or company account.");
     if (couponCode.trim() && !appliedCoupon) throw new Error("Apply your coupon or remove it before continuing.");
+    if (!availablePaymentMethods.includes(couponPaymentMethod)) throw new Error("This offer has no reviewed terms for the selected payment method. Choose an available method before checkout.");
     }
     await loadRazorpayCheckout();
     if (checkoutUser !== activeUserId.current) return;
@@ -520,7 +523,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           result = parseCheckoutReply(await billingRequest<unknown>("billing-customer", {
             action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
             quantity: audience === "company" ? seats : 1, requestId, trial: trialEligible, desktopRequestId: desktopRequest || undefined, couponCode: appliedCoupon?.code, inviteCode,
-            ...(appliedCoupon?.duration === "first_cycle" ? {paymentMethod: couponPaymentMethod} : {}),
+            paymentMethod: couponPaymentMethod,
           }, await authToken()));
           break;
         } catch (caught) {
@@ -556,9 +559,14 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (checkoutUser !== activeUserId.current) return;
     setCheckoutRecovery(null); setPaymentPending(true); checkoutFailure.current = "";
     let outcome: "open" | "failed" | "confirming" | "closed" = "open";
+    rememberPendingPayment(true, result.subscriptionId, {
+      requestId: checkoutRequestId, userId: checkoutUser!,
+      expiresAt: Date.now() + PAYMENT_CONFIRMATION_TIMEOUT_MS,
+      checkout: recovery?.checkout || {reply: result, preparedAt: preparedCheckout?.context === checkoutContext ? preparedCheckout.preparedAt : Date.now()},
+    });
     const checkout = new window.Razorpay({
       key: result.keyId, subscription_id: result.subscriptionId, name: "Morrow",
-      ...(result.paymentMethod ? {config: {display: {blocks: {selected: {name: result.paymentMethod === "upi" ? (trialEligible ? "Set up UPI AutoPay" : `Pay ${rupees(totalCharge)} with UPI`) : "Pay with credit or debit card", instruments: [{method: result.paymentMethod}]}}, sequence: ["block.selected"], preferences: {show_default_blocks: false}}}} : {}),
+      config: checkoutMethodConfig(result.paymentMethod, resume ? recovery?.checkout?.reply.paymentMethod : couponPaymentMethod),
       description: `${audience === "company" ? `${seats} business seats` : "Personal"} · ${period}`,
       prefill: { email: result.email }, theme: { color: "#F5D33F" },
       handler: (response: unknown) => {
@@ -596,11 +604,6 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       setError(typeof failure?.error?.description === "string"
         ? `Payment failed: ${failure.error.description.slice(0, 240)}`
         : "Razorpay reported a failed attempt. We will check the final payment status before another checkout.");
-    });
-    rememberPendingPayment(true, result.subscriptionId, {
-      requestId: checkoutRequestId, userId: checkoutUser!,
-      expiresAt: Date.now() + PAYMENT_CONFIRMATION_TIMEOUT_MS,
-      checkout: recovery?.checkout || {reply: result, preparedAt: preparedCheckout?.context === checkoutContext ? preparedCheckout.preparedAt : Date.now()},
     });
     checkout.open();
     opened = true; setCheckoutOpen(outcome === "open");
@@ -938,12 +941,13 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
 
         {paymentMode === "test" && <p className={styles.notice}>Test checkout. No real money is collected.</p>}
         {!activePlan && appliedCoupon?.duration !== "fixed" && <p className={styles.notice} role="status">{catalogState === "loading" ? "Loading plans…" : "This plan is not available for checkout yet. Choose another billing period or try again later."}</p>}
-        {appliedCoupon?.duration === "first_cycle" && <label className={styles.field}>
+        {appliedCoupon?.duration !== "fixed" && <label className={styles.field}>
           Payment method
           <select aria-label="Payment method" value={couponPaymentMethod} disabled={Boolean(busy) || checkoutOpen} onChange={event => setCouponPaymentMethod(event.target.value as "upi" | "card")}>
-            {(appliedCoupon.paymentMethods || ["upi"]).map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
+            {availablePaymentMethods.map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
           </select>
         </label>}
+        {appliedCoupon?.duration === "first_cycle" && availablePaymentMethods.length === 0 && <p role="alert">This offer is awaiting payment method review. Checkout is unavailable.</p>}
         {!businessInvoice && <label className={styles.field} htmlFor="invoice-recipient-name">Your name
           <input id="invoice-recipient-name" autoComplete="name" required minLength={2} maxLength={160} value={invoiceRecipientName}
             disabled={Boolean(busy) || checkoutOpen} onChange={event => { setInvoiceRecipientName(event.target.value); setPreparedCheckout(null); }} />
@@ -956,7 +960,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           </select>
         </label>
         <p className={styles.finePrint}>We need your state for the GST invoice.</p>
-        <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
+        <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || (appliedCoupon?.duration !== "fixed" && !availablePaymentMethods.includes(couponPaymentMethod)) || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
           {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
         <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>

@@ -21,7 +21,7 @@ describe('RZP-12 pending authorization', () => {
  it('persists before opening checkout and keeps dismissal in reconciliation', () => {
   const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url),'utf8');
   const start = source.indexOf('    checkout.open();');
-  expect(source.slice(start - 400, start)).toContain('rememberPendingPayment(true');
+  expect(source.indexOf("rememberPendingPayment(true, result.subscriptionId, {")).toBeLessThan(start);
   expect(source).not.toContain('Checkout closed. You can retry.');
   expect(source).toContain('receipt.userId !== identity?.userId');
  });
