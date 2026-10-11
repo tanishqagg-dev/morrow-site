@@ -14,24 +14,20 @@ describe("AUTH-01 desktop consent", () => {
     await approveDesktopRequest(request, "seat", "K7M4QX", send);
     expect(send).toHaveBeenCalledExactlyOnceWith({ action: "approve_desktop", requestId: "request", seatId: "seat", userCode: "K7M4QX" });
   });
-  it("rejects expired requests and checks lifetime again after replacement", async () => {
+  it("rejects expired requests before replacement", async () => {
     const { approveDesktopRequest } = await import("../lib/desktop-consent");
     const send = vi.fn();
-    await expect(approveDesktopRequest({ ...request, expiresAt: new Date(0).toISOString() }, "seat", "K7M4QX", send)).rejects.toThrow("expired");
+    await expect(approveDesktopRequest({ ...request, expiresAt: new Date(0).toISOString() }, "seat", "K7M4QX", send, true)).rejects.toThrow("expired");
     expect(send).not.toHaveBeenCalled();
-    const expiring = { ...request, seatInUse: { installationId: "old", deviceName: "Old Mac", lastSeenAt: null } };
-    send.mockImplementation(async () => { expiring.expiresAt = new Date(0).toISOString(); });
-    await expect(approveDesktopRequest(expiring, "seat", "K7M4QX", send, true)).rejects.toThrow("expired");
-    expect(send).toHaveBeenCalledExactlyOnceWith({ action: "revoke_device", installationId: "old" });
   });
-  it("replaces a Mac only by explicit choice, revoking before approval", async () => {
+  it("replaces a Mac only by explicit choice in one server transaction", async () => {
     const { approveDesktopRequest } = await import("../lib/desktop-consent");
     const send = vi.fn().mockResolvedValue({});
     const occupied = { ...request, seatInUse: { installationId: "old", deviceName: "Old Mac", lastSeenAt: null } };
     await expect(approveDesktopRequest(occupied, "seat", "K7M4QX", send)).rejects.toThrow("another Mac");
     expect(send).not.toHaveBeenCalled();
     await approveDesktopRequest(occupied, "seat", "K7M4QX", send, true);
-    expect(send.mock.calls.map(([body]) => body.action)).toEqual(["revoke_device", "approve_desktop"]);
+    expect(send).toHaveBeenCalledExactlyOnceWith({action:"approve_desktop",requestId:"request",seatId:"seat",userCode:"K7M4QX",replaceInstallationId:"old"});
   });
   it("removes automatic approval from paid-access and payment recovery paths", () => {
     const source = readFileSync(new URL("../components/BillingPortal.tsx", import.meta.url), "utf8");
@@ -62,4 +58,21 @@ describe("desktop consent screen", () => {
     const expired = renderToStaticMarkup(createElement(DesktopConsent, { ...props, now: Date.parse(request.expiresAt) }));
     expect(expired).toContain("start sign-in again"); expect(expired).not.toContain(">Connect this Mac</button>");
   });
+});
+
+it('BROWSER-04 validates the code before replacing a Mac in one approval call', async()=>{
+ const {approveDesktopRequest}=await import('../lib/desktop-consent');
+ const {BillingError}=await import('../lib/billing');
+ const occupied={...request,seatInUse:{installationId:'old',deviceName:'Old Mac',lastSeenAt:null}};
+ let oldConnected=true;
+ const send=vi.fn(async(body:object)=>{
+  const action=body as {action:string;userCode?:string;replaceInstallationId?:string};
+  if(action.action==='revoke_device') oldConnected=false;
+  if(action.userCode!=='K7M4QX') throw new BillingError('Wrong code','DEVICE_CODE_MISMATCH');
+  if(action.replaceInstallationId==='old') oldConnected=false;
+ });
+ await expect(approveDesktopRequest(occupied,'seat','AAAAAA',send,true)).rejects.toMatchObject({code:'DEVICE_CODE_MISMATCH'});
+ expect(oldConnected).toBe(true);expect(send).toHaveBeenCalledExactlyOnceWith({action:'approve_desktop',requestId:'request',seatId:'seat',userCode:'AAAAAA',replaceInstallationId:'old'});
+ send.mockClear();await approveDesktopRequest(occupied,'seat','K7M4QX',send,true);
+ expect(oldConnected).toBe(false);expect(send).toHaveBeenCalledExactlyOnceWith({action:'approve_desktop',requestId:'request',seatId:'seat',userCode:'K7M4QX',replaceInstallationId:'old'});
 });

@@ -667,7 +667,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       await approveDesktopRequest(desktopDetails, seat.id, userCode, async body => {
         const token = await authToken();
         if (!userId || userId !== activeUserId.current) throw new Error("Your account changed. Start sign-in again.");
-        if ((body as { action?: string }).action === "revoke_device") return sensitiveMutation(body);
+        if ((body as { replaceInstallationId?: string }).replaceInstallationId) return sensitiveMutation(body);
         return billingRequest("billing-customer", body, token);
       }, replace, () => Boolean(userId && userId === activeUserId.current));
       if (userId !== activeUserId.current) return;
@@ -676,7 +676,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     } catch (caught) {
       if (userId !== activeUserId.current) return;
       if (caught instanceof BillingError && caught.code === "DEVICE_CODE_MISMATCH") {
-        setCodeReset(value => value + 1); setDesktopProblem("That code doesn't match. Check Morrow on your Mac."); return;
+        setCodeReset(value => value + 1); setDesktopProblem("That code doesn't match. Check Morrow on your Mac.");
+        const result = await billingRequest<{request:DesktopRequest}>("billing-customer", {action:"desktop_request",requestId:desktopRequest}, await authToken());
+        if (userId === activeUserId.current && desktopRequestRef.current === result.request.id) setDesktopDetails(result.request);
+        return;
       }
       if (caught instanceof BillingError && caught.code === "DEVICE_LOGIN_EXPIRED") {
         if (Date.parse(desktopDetails.expiresAt) > Date.now()) setDesktopProblem("Too many tries. Start again from Morrow on your Mac.");

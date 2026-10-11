@@ -35,13 +35,13 @@ describe("AUTH-08 Clerk reverification", () => {
     await vi.waitFor(() => expect(modal).toBeTruthy()); modal.afterVerificationCancelled(); expect(await rejected).toMatchObject({ code: "reverification_cancelled" });
     expect(send).toHaveBeenCalledOnce();
   });
-  it("routes all six sensitive mutations and replacement revocation through reverification", () => {
+  it("routes all six sensitive mutations and atomic replacement through reverification", () => {
     const source = readFileSync(new URL("../components/BillingPortal.tsx", import.meta.url), "utf8");
     expect(source.includes("useReverification(")).toBe(true);
     expect(source.includes('sensitiveMutation({ action: "assign_seat"')).toBe(true);
     expect(source.includes('sensitiveMutation({ action: "remove_seat"')).toBe(true);
     expect(source.includes('sensitiveMutation({ action, subscriptionId:')).toBe(true);
     expect(source.includes('return sensitiveMutation(body)')).toBe(true);
-    expect(source.includes('if ((body as { action?: string }).action === "revoke_device") return sensitiveMutation(body)')).toBe(true);
+    expect(source.includes('if ((body as { replaceInstallationId?: string }).replaceInstallationId) return sensitiveMutation(body)')).toBe(true);
   });
 });

@@ -21,10 +21,7 @@ export async function approveDesktopRequest(request: DesktopRequest, seatId: str
     if (request.status !== "pending" || userCode.length !== 6) throw new Error("Enter the six-character code shown in Morrow on your Mac.");
   };
   check();
-  if (request.seatInUse) {
-    if (!replace) throw new Error("Your seat is used by another Mac. Choose Replace that Mac to continue.");
-    await send({ action: "revoke_device", installationId: request.seatInUse.installationId });
-    check();
-  }
-  await send({ action: "approve_desktop", requestId: request.id, seatId, userCode });
+  if (request.seatInUse && !replace) throw new Error("Your seat is used by another Mac. Choose Replace that Mac to continue.");
+  await send({ action: "approve_desktop", requestId: request.id, seatId, userCode,
+    ...(replace && request.seatInUse ? {replaceInstallationId:request.seatInUse.installationId} : {}) });
 }
