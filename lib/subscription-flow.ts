@@ -41,14 +41,16 @@ export function trialAuthorizationExpired(reply: CheckoutReply, preparedAt: numb
 }
 
 export const PAYMENT_CONFIRMATION_TIMEOUT_MS = 10 * 60_000;
-export function pendingPaymentOutcome(snapshot: BillingSnapshot | null | undefined, accountId: string, receipt: PendingPayment, hasAccess: boolean, now = Date.now()): "ready" | "waiting" | "failed" | "uncertain" {
+export function pendingPaymentOutcome(snapshot: BillingSnapshot | null | undefined, accountId: string, receipt: PendingPayment, hasAccess: boolean, now = Date.now()): "ready" | "waiting" | "failed" | "uncertain" | "closed" {
   if (hasAccess && !receipt.userId) return "ready";
   const subscription = snapshot?.subscriptions.find(item => item.account_id === accountId &&
     (item.razorpay_subscription_id === receipt.subscriptionId || item.id === receipt.subscriptionId));
   if (receipt.userId) {
     // Access from another subscription is not evidence about this checkout.
     if (subscription && hasAccess && subscription.paid_until && Date.parse(subscription.paid_until) > now) return "ready";
-    if (subscription && ["cancelled", "expired", "trial_canceled", "completed"].includes(subscription.status)) return "failed";
+    const hasPayment = subscription && snapshot?.payments?.some(payment => payment.subscription_id === subscription.id && payment.status !== "failed");
+    if (subscription && !hasPayment && !subscription.paid_until && ["created", "cancelled", "expired"].includes(subscription.status)) return "closed";
+    // A user-bound checkout is retained until abandon_checkout verifies its cancellation.
     if (!receipt.expiresAt || now >= receipt.expiresAt) return "uncertain";
     return "waiting";
   }

@@ -20,6 +20,8 @@ import { printGstDocument, type GstDocument, type GatewayReceipt, type BillingDo
 import { DesktopConsent } from "./DesktopConsent";
 import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consent";
 import { quantityChangeEligibility } from "@/lib/subscription-quantity";
+import { CheckoutRecovery } from "./CheckoutRecovery";
+import { abandonCheckout, type CheckoutRecoveryState } from "@/lib/checkout-recovery";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -217,15 +219,18 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [paymentPending, setPaymentPending] = useState(false);
   const [paymentDesktopRequest, setPaymentDesktopRequest] = useState("");
   const pendingReceipt = useRef<NonNullable<ReturnType<typeof parsePendingPayment>> | null>(null);
+  const [checkoutRecovery, setCheckoutRecovery] = useState<CheckoutRecoveryState | null>(null);
+  const checkoutFailure = useRef("");
   const [paymentRecovery, setPaymentRecovery] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelRetryId, setCancelRetryId] = useState<string | null>(null);
   const connectionLock = useRef(false);
   const pendingKey = `morrow:payment-pending:${identity?.userId}:${selectedAccountId}`;
-  const rememberPendingPayment = (pending: boolean, subscriptionId?: string, authorization?: {requestId: string; userId: string; expiresAt: number}) => {
+  const rememberPendingPayment = (pending: boolean, subscriptionId?: string, authorization?: {requestId: string; userId: string; expiresAt: number; checkout?: {reply: CheckoutReply; preparedAt: number}}) => {
     const receipt = pending ? pendingReceipt.current?.subscriptionId === subscriptionId ? pendingReceipt.current : { desktopRequest, subscriptionId, startedAt: Date.now(), ...authorization } : null;
     pendingReceipt.current = receipt;
     setPaymentPending(pending);
+    if (!pending) { setCheckoutRecovery(null); checkoutFailure.current = ""; }
     setPaymentDesktopRequest(pending ? desktopRequest : "");
     try {
       if (pending) sessionStorage.setItem(pendingKey, JSON.stringify(receipt));
@@ -239,7 +244,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     }
   };
   useEffect(() => {
-    setConfirmCancel(false); setError(""); setNotice(""); setPaymentRecovery(false);
+    setConfirmCancel(false); setError(""); setNotice(""); setPaymentRecovery(false); setCheckoutRecovery(null); checkoutFailure.current = "";
     try {
       const saved = sessionStorage.getItem(pendingKey);
       let receipt = saved ? parsePendingPayment(JSON.parse(saved)) : null;
@@ -456,13 +461,16 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     });
   };
 
-  const startCheckout = () => {
-    if (checkoutLock.current || paymentPending || hasPaidAccess) return;
+  const startCheckout = (resume = false) => {
+    if (checkoutLock.current || paymentPending || hasPaidAccess || (!resume && pendingReceipt.current)) return;
     checkoutLock.current = true;
     let opened = false;
     void run("checkout", async () => {
     if (!signedIn || !selectedAccount) throw new Error("Your account is still loading. Please try again.");
     const checkoutUser = activeUserId.current;
+    const recovery = resume ? pendingReceipt.current : null;
+    if (resume && (!recovery?.checkout || recovery.userId !== checkoutUser || trialAuthorizationExpired(recovery.checkout.reply, recovery.checkout.preparedAt))) throw new Error("This checkout can no longer be resumed. Change plan to cancel it before starting again.");
+    if (!resume) {
     const invoiceProfile = invoiceProfileForCheckout(businessInvoice, invoiceDetails);
     if (!businessInvoice) {
       const name = invoiceRecipientNameForCheckout(invoiceRecipientName);
@@ -495,15 +503,17 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (!activePlan) throw new Error("Choose a published plan first.");
     if (selectedAccount.kind !== audience) throw new Error("Select a matching personal or company account.");
     if (couponCode.trim() && !appliedCoupon) throw new Error("Apply your coupon or remove it before continuing.");
+    }
     await loadRazorpayCheckout();
     if (checkoutUser !== activeUserId.current) return;
-    let result = prepared;
-    let checkoutRequestId = preparedCheckout?.requestId || crypto.randomUUID();
-    if (result && trialEligible && trialAuthorizationExpired(result, preparedCheckout?.preparedAt ?? 0)) {
+    let result = recovery?.checkout?.reply || prepared;
+    let checkoutRequestId = recovery?.requestId || preparedCheckout?.requestId || crypto.randomUUID();
+    if (!resume && result && trialEligible && trialAuthorizationExpired(result, preparedCheckout?.preparedAt ?? 0)) {
       result = null; setPreparedCheckout(null);
       setNotice("This checkout expired. Review your new trial date before continuing.");
     }
     if (!result) {
+      if (!activePlan) throw new Error("Choose a published plan first.");
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const requestId = crypto.randomUUID(); checkoutRequestId = requestId;
@@ -538,13 +548,14 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         return; // Show the fixed server date before the customer authorizes their bank.
       }
     }
-    if (trialEligible && (!result.trialEndsAt || Date.parse(result.trialEndsAt) <= Date.now())) {
+    if (!resume && trialEligible && (!result.trialEndsAt || Date.parse(result.trialEndsAt) <= Date.now())) {
       setPreparedCheckout(null); setNotice("This checkout expired. Review your trial again to get a new date.");
       return;
     }
     if (!window.Razorpay) throw new Error("Razorpay checkout could not be opened.");
     if (checkoutUser !== activeUserId.current) return;
-    let outcome: "open" | "failed" | "confirming" = "open";
+    setCheckoutRecovery(null); setPaymentPending(true); checkoutFailure.current = "";
+    let outcome: "open" | "failed" | "confirming" | "closed" = "open";
     const checkout = new window.Razorpay({
       key: result.keyId, subscription_id: result.subscriptionId, name: "Morrow",
       ...(result.paymentMethod ? {config: {display: {blocks: {selected: {name: result.paymentMethod === "upi" ? (trialEligible ? "Set up UPI AutoPay" : `Pay ${rupees(totalCharge)} with UPI`) : "Pay with credit or debit card", instruments: [{method: result.paymentMethod}]}}, sequence: ["block.selected"], preferences: {show_default_blocks: false}}}} : {}),
@@ -554,7 +565,8 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         if (outcome === "confirming") return;
         outcome = "confirming";
         checkoutLock.current = false; setCheckoutOpen(false);
-        if (checkoutUser !== activeUserId.current) return;
+        if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
+        setCheckoutRecovery(null);
         const details = response as { razorpay_payment_id?: string; razorpay_subscription_id?: string; razorpay_signature?: string };
         rememberPendingPayment(true, result.subscriptionId);
         void run("confirm", async () => {
@@ -567,16 +579,20 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       },
       modal: { ondismiss: () => {
         checkoutLock.current = false; setCheckoutOpen(false);
-        if (checkoutUser === activeUserId.current && outcome === "open") {
+        if (checkoutUser === activeUserId.current && selectedAccount.id === selectedAccountRef.current && outcome !== "confirming") {
+          if (outcome === "open") outcome = "closed";
           setNotice("Checking your payment… Closing checkout does not confirm whether a payment went through.");
+          void pendingCheck.current();
         }
       } },
     });
     checkout.on("payment.failed", (response: unknown) => {
-      if (outcome === "confirming" || checkoutUser !== activeUserId.current) return;
+      if (outcome === "confirming" || checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
       outcome = "failed";
       const failure = response as { error?: { description?: string } };
       setNotice("");
+      checkoutFailure.current = typeof failure?.error?.description === "string"
+        ? failure.error.description.slice(0, 240) : "Your bank did not complete this payment.";
       setError(typeof failure?.error?.description === "string"
         ? `Payment failed: ${failure.error.description.slice(0, 240)}`
         : "Razorpay reported a failed attempt. We will check the final payment status before another checkout.");
@@ -584,6 +600,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     rememberPendingPayment(true, result.subscriptionId, {
       requestId: checkoutRequestId, userId: checkoutUser!,
       expiresAt: Date.now() + PAYMENT_CONFIRMATION_TIMEOUT_MS,
+      checkout: recovery?.checkout || {reply: result, preparedAt: preparedCheckout?.context === checkoutContext ? preparedCheckout.preparedAt : Date.now()},
     });
     checkout.open();
     opened = true; setCheckoutOpen(outcome === "open");
@@ -683,7 +700,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
 
   const refreshAccess = () => void run("refresh", async () => {
     if (identityRef.current?.loaded === false) { window.location.reload(); return; }
-    if (paymentPending) { await pendingCheck.current(); return; }
+    if (pendingReceipt.current) { await pendingCheck.current(); return; }
     const userId = activeUserId.current;
     const latest = await refresh();
     if (latest && paidSeatForAccount(latest, selectedAccountId, identityRef.current?.email || null)) {
@@ -704,7 +721,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       return true;
     };
     const uncertain = () => {
-      setNotice("We are still waiting for the final payment status. Please do not pay again. Check payment status here or contact support.");
+      setPaymentPending(false); setCheckoutRecovery("uncertain"); setNotice("");
       return true;
     };
     // Bound confirmation even when every request fails or the browser is offline.
@@ -720,6 +737,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     const outcome = pendingPaymentOutcome(latest, accountId, receipt,
       Boolean(latest && paidSeatForAccount(latest, accountId, identityRef.current?.email || null)));
     if (outcome === "uncertain") return uncertain();
+    if (outcome === "closed") {
+      setPaymentPending(false); setCheckoutRecovery(checkoutFailure.current ? "failed" : "closed"); setError(""); setNotice("");
+      return true;
+    }
     if (outcome === "waiting") return false;
     if (outcome === "failed") return recover();
     rememberPendingPayment(false);
@@ -741,7 +762,25 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   }, [paymentPending, pendingKey]);
 
   const stage = subscriptionStage({ loadFailed: authTimedOut || snapshotFailed, loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
-    hasPaidAccess, paymentPending, paymentRecovery, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
+    hasPaidAccess, paymentPending: paymentPending && !checkoutRecovery, paymentRecovery, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
+
+  const changeCheckoutPlan = () => void run("abandon", async () => {
+    const receipt = pendingReceipt.current;
+    const userId = activeUserId.current;
+    const accountId = selectedAccountRef.current;
+    if (!receipt || receipt.userId !== userId) return;
+    const stillCurrent = () => receipt === pendingReceipt.current && userId === activeUserId.current && accountId === selectedAccountRef.current;
+    try {
+      await abandonCheckout(async () => billingRequest("billing-customer", {action:"abandon_checkout", subscriptionId:receipt.subscriptionId, requestId:receipt.requestId}, await authToken()), () => {
+        rememberPendingPayment(false); setPreparedCheckout(null); setPaymentRecovery(false);
+        setNotice("Checkout cancelled. Choose your plan and payment method below.");
+      }, stillCurrent);
+    } catch (caught) {
+      if (!stillCurrent()) return;
+      if (caught instanceof BillingError && ["CHECKOUT_PAYMENT_PENDING","BILLING_CHECKOUT_PAID"].includes(caught.code || "")) { await pendingCheck.current(); if (!stillCurrent()) return; }
+      throw caught;
+    }
+  });
 
   const loadDevices = useCallback(async () => {
     const userId = activeUserId.current;
@@ -860,8 +899,12 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       <p className={styles.supportNote}>No invitation yet? <a href="/contact">Request beta access</a>.</p>
     </section>}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
+      {checkoutRecovery && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
+        canResume={Boolean(pendingReceipt.current?.checkout && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId && item.status === "created") && !trialAuthorizationExpired(pendingReceipt.current.checkout.reply, pendingReceipt.current.checkout.preparedAt, clock))}
+        onResume={() => startCheckout(true)} onChangePlan={changeCheckoutPlan} onRefresh={refreshAccess} />}
       <h1 id="plan-title">{trialEligible ? `Start your ${snapshot?.trial?.days || trialConfig.days}-day free trial.` : "Subscribe to Morrow."}</h1>
       <p className={styles.subtitle}>{trialEligible ? "Authorize your bank, then Morrow unlocks on your Mac." : "Your voice workspace on your Mac."}</p>
+      <fieldset disabled={Boolean(pendingReceipt.current)} className={styles.planFieldset}>
       {monthlyAvailable && yearlyAvailable && <div className={styles.termSwitch} role="group" aria-label="Billing period">
         <button aria-pressed={period === "monthly"} onClick={() => choosePeriod("monthly")} disabled={Boolean(busy) || checkoutOpen}>Monthly</button>
         <button aria-pressed={period === "yearly"} onClick={() => choosePeriod("yearly")} disabled={Boolean(busy) || checkoutOpen}>Yearly {yearlyDiscount > 0 && <span>Save {yearlyDiscount}%</span>}</button>
@@ -910,7 +953,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           </select>
         </label>
         <p className={styles.finePrint}>We need your state for the GST invoice.</p>
-        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
+        <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
           {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
         <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
@@ -941,6 +984,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       <p className={styles.supportNote}>Your ChatGPT subscription is separate.</p>
       {snapshot?.betaInviteRequired && <button className={styles.textButton} onClick={() => { setInviteAccepted(false); setError(""); }} disabled={Boolean(busy) || checkoutOpen}>Use a different invite code</button>}
       {bulkEmail && <p className={styles.supportNote}>Buying for a team? <a href={`mailto:${bulkEmail}?subject=Morrow%20bulk%20package`}>Contact us</a></p>}
+      </fieldset>
     </section>}
     {stage === "account" && <section aria-labelledby="account-title" id="account">
       <h1 id="account-title">Your subscription</h1>

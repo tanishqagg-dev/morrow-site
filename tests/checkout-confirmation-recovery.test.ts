@@ -19,6 +19,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
   let pending: Promise<void>;
   const open = vi.fn();
   const bindings = {
+    pendingReceipt: {current:null}, pendingCheck: {current:vi.fn()}, checkoutFailure:{current:""}, setCheckoutRecovery:vi.fn(), setPaymentPending:vi.fn(),
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
     invoiceRecipientName: "QA Buyer", invoiceRecipientNameForCheckout, businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
@@ -32,8 +33,8 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
     ...overrides,
     run: (_name: string, work: () => Promise<void>) => { pending = work(); return pending.catch(() => {}); },
   };
-  const start = execute('  const startCheckout = () => {', '  const forgetDesktop =', '\nreturn startCheckout;', bindings);
-  return { ...bindings, open, start: () => { start(); return pending!; } };
+  const start = execute('  const startCheckout = (resume = false) => {', '  const forgetDesktop =', '\nreturn startCheckout;', bindings);
+  return { ...bindings, open, start: (resume = false) => { start(resume); return pending!; } };
 }
 const receipt = { desktopRequest: '', subscriptionId: 'sub-provider', startedAt: now };
 const snapshot = (status: string, accountId = 'account') => ({ subscriptions: [{ id: 'local', razorpay_subscription_id: 'sub-provider', account_id: accountId, status }] }) as BillingSnapshot;
@@ -44,7 +45,7 @@ function confirmationFlow(status = 'expired', startedAt = now) {
     selectedAccountRef: { current: 'account' }, identityRef: { current: { email: 'me@example.com' } },
     pendingReceipt: { current: saved as typeof saved | null }, pendingPaymentOutcome,
     refresh: vi.fn(async () => snapshot(status)), paidSeatForAccount: vi.fn(() => undefined as object | undefined),
-    rememberPendingPayment: vi.fn(), setPreparedCheckout: vi.fn(), setError: vi.fn(), setNotice: vi.fn(), setPaymentRecovery: vi.fn(),
+    rememberPendingPayment: vi.fn(), setPreparedCheckout: vi.fn(), setError: vi.fn(), setNotice: vi.fn(), setPaymentRecovery: vi.fn(), setPaymentPending:vi.fn(), setCheckoutRecovery:vi.fn(), checkoutFailure:{current:""},
     paymentDesktopRequest: '', desktopRequest: '', connectAfterPayment: vi.fn(),
   };
   execute('  pendingCheck.current = async () => {', '  useEffect(() => {', '', bindings);
@@ -134,7 +135,7 @@ describe('bounded payment confirmation', () => {
   it('persists the subscription id and original confirmation time', () => {
     expect(parsePendingPayment(receipt)).toEqual(receipt);
     let stored = '';
-    const bindings = { setPaymentPending: vi.fn(), setPaymentDesktopRequest: vi.fn(), desktopRequest: '', pendingReceipt: { current: null },
+    const bindings = { setPaymentPending: vi.fn(), setPaymentDesktopRequest: vi.fn(), setCheckoutRecovery:vi.fn(), checkoutFailure:{current:""}, desktopRequest: '', pendingReceipt: { current: null },
       pendingKey: 'pending', sessionStorage: { setItem: (_key: string, value: string) => { stored = value; }, removeItem: vi.fn() } };
     const remember = execute('  const rememberPendingPayment =', '  useEffect(() => {', '\nreturn rememberPendingPayment;', bindings);
     remember(true, 'sub-provider');
@@ -145,7 +146,7 @@ describe('bounded payment confirmation', () => {
     expect(bindings.setPaymentPending).toHaveBeenLastCalledWith(false);
   });
   it('blocks checkout when its authorization marker cannot be stored', () => {
-    const bindings = {setPaymentPending: vi.fn(), setPaymentDesktopRequest: vi.fn(), desktopRequest: '', pendingReceipt: {current: null}, pendingKey: 'pending',
+    const bindings = {setPaymentPending: vi.fn(), setPaymentDesktopRequest: vi.fn(), setCheckoutRecovery:vi.fn(), checkoutFailure:{current:""}, desktopRequest: '', pendingReceipt: {current: null}, pendingKey: 'pending',
       sessionStorage: {setItem: () => {throw new Error('Storage unavailable');}, removeItem: vi.fn()}};
     const remember = execute('  const rememberPendingPayment =', '  useEffect(() => {', '\nreturn rememberPendingPayment;', bindings);
     expect(() => remember(true, 'sub-provider', {requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',userId:'user',expiresAt:now+600_000})).toThrow('save this payment');
@@ -219,4 +220,12 @@ describe('DOC-4b invoice recipient before checkout', () => {
     const flow=checkoutFlow();flow.billingRequest.mockImplementation(async(_endpoint,body)=>{if(body.action==='save_invoice_recipient_name')flow.activeUserId.current='other-user';return {};});
     await flow.start();expect(flow.billingRequest.mock.calls).toHaveLength(1);expect(flow.open).not.toHaveBeenCalled();
   });
+});
+
+it('BROWSER-03 Resume reopens the saved subscription without a fresh checkout or profile mutation', async () => {
+ const saved = {...reply(), trialEndsAt:null};
+ const flow = checkoutFlow(saved, now, {trialEligible:false, pendingReceipt:{current:{userId:'user',requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',subscriptionId:'sub-new',checkout:{reply:saved,preparedAt:now}}}});
+ await flow.start(true);
+ expect(flow.open).toHaveBeenCalledOnce(); expect(flow.billingRequest).not.toHaveBeenCalled();
+ expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true,'sub-new',expect.objectContaining({requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',checkout:{reply:saved,preparedAt:now}}));
 });

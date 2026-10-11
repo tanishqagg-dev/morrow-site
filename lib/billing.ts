@@ -33,15 +33,16 @@ export function parseBillingCatalog(value: unknown): { plans: BillingPlan[]; mod
   return { ...result.data, trial: result.data.trial ?? trialOff };
 }
 
-export type PendingPayment = { desktopRequest: string; subscriptionId?: string; startedAt?: number; requestId?: string; userId?: string; expiresAt?: number };
+export type PendingPayment = { desktopRequest: string; subscriptionId?: string; startedAt?: number; requestId?: string; userId?: string; expiresAt?: number; checkout?: {reply: CheckoutReply; preparedAt: number} };
 export function parsePendingPayment(value: unknown): PendingPayment | null {
   const result = z.object({ desktopRequest: z.union([z.literal(""), z.uuidv4()]),
     subscriptionId: z.string().min(1).max(128).optional(),
     requestId: z.uuidv4().optional(), userId: z.string().min(1).max(128).optional(),
     expiresAt: z.number().finite().positive().optional(),
+    checkout: z.object({reply: z.lazy(() => checkoutReplySchema), preparedAt: z.number().finite().nonnegative().max(Date.now())}).optional(),
     startedAt: z.number().finite().nonnegative().max(Date.now()).optional(),
   }).safeParse(value);
-  return result.success ? result.data : null;
+  return result.success && (!result.data.checkout || (result.data.userId && result.data.requestId && result.data.checkout.reply.subscriptionId === result.data.subscriptionId)) ? result.data : null;
 }
 
 export function clearPendingAuthorizations(storage: Pick<Storage, "length" | "key" | "removeItem">, userId: string) {

@@ -38,3 +38,5 @@
 .documentRow a:not(.quietButton) { text-decoration: underline; text-underline-offset: 4px; font-size: 14px; }
 .documentRow > .quietButton { flex-shrink: 0; text-decoration: none; min-height: 44px; }
 @media(max-width:700px) { .documentRow { flex-direction: column; gap: 12px; } }
+
+.planFieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
