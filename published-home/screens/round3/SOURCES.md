@@ -13,3 +13,5 @@ Captured 11 October 2026 from the running app preview at `http://localhost:1420`
 | island-working.webp | The existing real native island preview in `qa/app/round2/native-island-working-light.png`, cropped x=508..932, y=22..130. The native island has no route in the Vite preview. |
 
 All captures show interface preview sample data. The website calls the command sequence an example workflow. It does not claim a live task ran during capture.
+
+Recaptured after review with capture-only CSS hiding `.morrow-preview-label` and `#onboarding-preview-notice`. Application source is unchanged. Each route was checked for other visible development labels before capture; see `qa/round3/home/app/home-clean-capture-report.json`. `library.webp` is the full fresh `?theme=light&view=work` capture used behind the native island.
