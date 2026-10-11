@@ -39,7 +39,7 @@ try {
     else if(body.action==='approve_desktop'){assert.equal(body.userCode,'K7M4QX');requestStatus='approved';payload={approved:true};}
     else if(body.action==='save_invoice_profile'){assert.equal(body.invoiceProfile.kind,'consumer');payload={saved:true};}
     else if(body.action==='checkout')payload={subscriptionId:'sub_test',keyId:'rzp_test_fixture',email:'qa@example.test',name:'QA',trialEndsAt:null,trialAuthorizationExpiresAt:null};
-    else if(body.action==='invoices')payload={invoices:[]};
+    else if(body.action==='invoices')payload={invoices:[],receipts:[],receiptsStatus:'available'};
     else throw new Error('Unstubbed action '+body.action);
     return route.fulfill({status:200,headers:{'access-control-allow-origin':origin},contentType:'application/json',body:JSON.stringify(payload)});
    }

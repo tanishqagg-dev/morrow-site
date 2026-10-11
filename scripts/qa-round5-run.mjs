@@ -30,6 +30,6 @@ if(process.argv.includes('--check')) {
    await new Promise(resolve=>setTimeout(resolve,500));
   }
   if(!ready)throw new Error('Local Next fixture did not become ready');
-  await run(process.execPath,[process.argv.includes('--pairing')?'scripts/qa-round5-pairing.mjs':'scripts/qa-round5-site.mjs']);
+  await run(process.execPath,[process.argv.includes('--pairing')?'scripts/qa-round5-pairing.mjs':process.argv.includes('--gst')?'scripts/qa-round5-gst.mjs':'scripts/qa-round5-site.mjs']);
  } finally {try{process.kill(-server.pid,'SIGTERM');}catch{}}
 }

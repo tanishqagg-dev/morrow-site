@@ -145,6 +145,12 @@ export async function billingRequest<T>(functionName: string, body?: object, tok
       cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer",
       signal: controller.signal,
     });
+    if (response.ok && functionName === "billing-customer" && (body as {action?: string; format?: string})?.action === "invoices" && (body as {format?: string})?.format === "html") {
+      if (!response.headers.get("content-type")?.toLowerCase().startsWith("text/html")) throw new Error("The printable document returned an unreadable response. Try again.");
+      const html = await response.text();
+      if (controller.signal.aborted) throw new Error("Request timed out.");
+      return html as T;
+    }
     const result = await response.json().catch(() => null);
     if (controller.signal.aborted) throw new Error("Request timed out.");
     if (response.status === 403 && isReverificationHint(result)) return result as T;

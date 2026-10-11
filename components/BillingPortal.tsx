@@ -15,6 +15,8 @@ import { gstStates, invoiceFormFromProfile, invoiceProfileForCheckout } from "@/
 import { pollDesktopCompletion } from "@/lib/desktop-completion";
 import { revokeConnectedMac, signOutEverywhere, type ConnectedMac } from "@/lib/connected-macs";
 import { clearDesktopRequest, resolveDesktopRequest, type StoredDesktopRequest } from "@/lib/desktop-storage";
+import { BillingDocuments } from "./BillingDocuments";
+import { printGstDocument, type GstDocument, type GatewayReceipt, type BillingDocumentsReply } from "@/lib/billing-documents";
 import { DesktopConsent } from "./DesktopConsent";
 import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consent";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
@@ -171,7 +173,9 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [devices, setDevices] = useState<ConnectedMac[]>([]);
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [devicesError, setDevicesError] = useState("");
-  const [invoices, setInvoices] = useState<Array<{id:string;number:string;status:string;amountPaise:number;paidAt:string|null;url:string|null}>>([]);
+  const [invoices, setInvoices] = useState<GstDocument[]>([]);
+  const [receipts, setReceipts] = useState<GatewayReceipt[]>([]);
+  const [receiptsStatus, setReceiptsStatus] = useState<"available" | "unavailable" | null>(null);
   const selectedAccountRef = useRef("");
   const refreshSequence = useRef(0);
   const [couponCode, setCouponCode] = useState("");
@@ -191,7 +195,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [seats, setSeats] = useState(2);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   selectedAccountRef.current = selectedAccountId;
-  useEffect(() => { setInvoices([]); }, [selectedAccountId]);
+  useEffect(() => { setInvoices([]); setReceipts([]); setReceiptsStatus(null); }, [selectedAccountId]);
   const [seatEmail, setSeatEmail] = useState("");
   const desktopRequestRef = useRef("");
   const [desktopRequest, setDesktopRequest] = useState("");
@@ -792,6 +796,20 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       setNotice(action === "cancel" ? (subscription.status === "trialing" ? "Trial canceled. You will not be charged. Access stays active until your trial ends." : "Renewal cancelled. Access stays active through the paid term.") : "Seat change scheduled for the next billing cycle.");
     });
 
+  const printInvoice = (document: GstDocument) => {
+    const userId = activeUserId.current, accountId = selectedAccountId;
+    const stillSelected = () => userId === activeUserId.current && accountId === selectedAccountRef.current;
+    void run("print-invoice", async () => {
+      try {
+        await printGstDocument(document, async () => {
+          const token = await authToken();
+          if (!stillSelected()) throw new Error("Your account changed. Load your documents again.");
+          return billingRequest<string>("billing-customer", {action: "invoices", subscriptionId: document.subscriptionId, documentId: document.id, format: "html"}, token);
+        }, stillSelected);
+      } catch (caught) { if (stillSelected()) throw caught; }
+    });
+  };
+
   const loadInvoices = () => void run("invoices", async () => {
     const userId = activeUserId.current;
     const accountId = selectedAccountId;
@@ -799,10 +817,12 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     try {
       const token = await authToken();
       if (!stillSelected()) return;
-      const results = await Promise.all(subscriptions.filter(sub => sub.razorpay_subscription_id).map(sub =>
-        billingRequest<{invoices:typeof invoices}>("billing-customer", {action:"invoices",subscriptionId:sub.id}, token)));
+      const results = await Promise.all(subscriptions.map(sub =>
+        billingRequest<BillingDocumentsReply>("billing-customer", {action:"invoices",subscriptionId:sub.id}, token)));
       if (!stillSelected()) return;
       setInvoices(results.flatMap(result => result.invoices));
+      setReceipts(results.flatMap(result => result.receipts));
+      setReceiptsStatus(results.some(result => result.receiptsStatus === "unavailable") ? "unavailable" : "available");
     } catch (caught) { if (stillSelected()) throw caught; }
   });
 
@@ -949,11 +969,8 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       </section>
       <p className={styles.paymentMethod}><strong>Payment method</strong>Morrow does not store your card or UPI details. Razorpay manages your AutoPay authorization.</p>
       <details className={styles.management} key={selectedAccountId} onToggle={event => { if (event.currentTarget.open && !busy) loadInvoices(); }}><summary>Payments and invoices</summary>
-        {busy === "invoices" && <p role="status">Loading invoices…</p>}
-        {invoices.length > 0 && <div className={styles.tableScroll}><table className={styles.invoiceTable}><caption className={styles.srOnly}>Morrow invoices</caption><thead><tr><th scope="col">Invoice</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Receipt</th></tr></thead><tbody>
-          {invoices.map(invoice => <tr key={invoice.id}><td>{invoice.number}<small>{invoice.paidAt ? day(invoice.paidAt) : "Not paid"}</small></td><td>{rupees(invoice.amountPaise)}</td><td>{invoice.status}</td><td>{invoice.url ? <a href={invoice.url} target="_blank" rel="noopener noreferrer">View invoice</a> : "Unavailable"}</td></tr>)}
-        </tbody></table></div>}
-        {(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).length === 0 ? invoices.length === 0 && busy !== "invoices" && <p>No payments yet.{currentSubscription?.status === "trialing" && (currentSubscription.trial_ends_at || currentSubscription.paid_until) ? ` Your first invoice appears after ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : ""}</p> :
+        <BillingDocuments invoices={invoices} receipts={receipts} receiptsStatus={receiptsStatus} loading={busy === "invoices"} busy={Boolean(busy)} onPrint={printInvoice} onReload={loadInvoices} />
+        {(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).length === 0 ? receiptsStatus !== null && invoices.length === 0 && receipts.length === 0 && busy !== "invoices" && <p>No payments yet.{currentSubscription?.status === "trialing" && (currentSubscription.trial_ends_at || currentSubscription.paid_until) ? ` Your first invoice appears after ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : ""}</p> :
           <div className={styles.tableScroll}><table className={styles.invoiceTable}><caption className={styles.srOnly}>Morrow payment history</caption><thead><tr><th scope="col">Date</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).map((payment) => <tr key={payment.id}><td>{day(payment.paid_at)}<small>Payment ID: {payment.razorpay_payment_id}</small></td><td>{rupees(payment.amount_paise)}</td><td>{payment.status}</td></tr>)}</tbody></table></div>}
       </details>
       <p className={styles.refundNote}>Need a refund? <a href={`mailto:${siteConfig.supportEmail}?subject=Morrow%20refund%20request`}>Contact support</a> within 7 days of your first payment. <a href="/refunds">See the policy</a>.</p>

@@ -42,7 +42,7 @@ function invoiceFlow() {
   const bindings = { activeUserId: { current: 'qa-user' }, selectedAccountId: 'account-a',
     selectedAccountRef: { current: 'account-a' }, authToken,
     subscriptions: [{ id: 'sub-a', razorpay_subscription_id: 'gateway-sub-a' }],
-    invoices: [], billingRequest, setInvoices, setNotice, setError,
+    invoices: [], billingRequest, setInvoices, setReceipts: vi.fn(), setReceiptsStatus: vi.fn(), setNotice, setError,
     run: (_name: string, task: () => Promise<void>) => task().catch(setError),
   };
   const start = source.indexOf('const loadInvoices =');
@@ -57,7 +57,7 @@ function invoiceFlow() {
 test('switching accounts clears old invoices before another account is displayed', () => {
   const setInvoices = vi.fn();
   runInNewContext(effectEnding('}, [selectedAccountId]);'), {
-    useEffect: (callback: () => void) => callback(), selectedAccountId: 'account-b', setInvoices,
+    useEffect: (callback: () => void) => callback(), selectedAccountId: 'account-b', setInvoices, setReceipts: vi.fn(), setReceiptsStatus: vi.fn(),
   });
   expect(setInvoices).toHaveBeenCalledWith([]);
 });
@@ -100,7 +100,7 @@ test('a rejected old-account invoice request does not show an error on the new a
 
 test('matching account invoices appear and signed-out requests are ignored', async () => {
   const flow = invoiceFlow();
-  flow.billingRequest.mockResolvedValue({ invoices: [{ id: 'invoice-a' }] });
+  flow.billingRequest.mockResolvedValue({ invoices: [{ id: 'invoice-a' }], receipts: [], receiptsStatus: 'available' });
   flow.load();
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
   expect(flow.setInvoices).toHaveBeenCalledWith([{ id: 'invoice-a' }]);
@@ -137,9 +137,22 @@ test('account refresh scopes recovery to the selected account and keeps initial 
 
 test('an empty invoice response clears rows without creating a second empty-state notice', async () => {
   const flow = invoiceFlow();
-  flow.billingRequest.mockResolvedValue({ invoices: [] });
+  flow.billingRequest.mockResolvedValue({ invoices: [], receipts: [], receiptsStatus: 'available' });
   flow.load();
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
   expect(flow.setInvoices).toHaveBeenCalledWith([]);
   expect(flow.setNotice).not.toHaveBeenCalled();
+});
+
+test('GST document loading includes ledger subscriptions and keeps receipt outages separate',async()=>{
+ const flow=invoiceFlow();
+ flow.subscriptions.push({id:'sub-b',razorpay_subscription_id:null as unknown as string});
+ flow.billingRequest.mockImplementation(async(_endpoint,body)=>body.subscriptionId==='sub-a'
+  ? {invoices:[{id:'tax-invoice'}],receipts:[{id:'gateway-receipt'}],receiptsStatus:'available'}
+  : {invoices:[{id:'credit-note'}],receipts:[],receiptsStatus:'unavailable'});
+ flow.load();
+ await vi.waitFor(()=>expect(flow.setInvoices).toHaveBeenCalledWith([{id:'tax-invoice'},{id:'credit-note'}]));
+ expect(flow.billingRequest).toHaveBeenCalledTimes(2);
+ expect(flow.setReceipts).toHaveBeenCalledWith([{id:'gateway-receipt'}]);
+ expect(flow.setReceiptsStatus).toHaveBeenCalledWith('unavailable');
 });
