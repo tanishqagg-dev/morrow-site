@@ -40,10 +40,17 @@ export function trialAuthorizationExpired(reply: CheckoutReply, preparedAt: numb
   return !Number.isFinite(expiresAt) || now >= expiresAt;
 }
 
+export const BANK_CONFIRMATION_TIMEOUT_MS = 3 * 60_000;
 export const PAYMENT_CONFIRMATION_TIMEOUT_MS = 10 * 60_000;
 export function pendingPaymentOutcome(snapshot: BillingSnapshot | null | undefined, accountId: string, receipt: PendingPayment, hasAccess: boolean, now = Date.now()): "ready" | "waiting" | "failed" | "uncertain" | "closed" {
   const subscription = snapshot?.subscriptions.find(item => item.account_id === accountId &&
     (item.razorpay_subscription_id === receipt.subscriptionId || item.id === receipt.subscriptionId));
+  const confirming = receipt.phase === "confirming" || snapshot?.confirmingCheckouts?.some(item => item.accountId === accountId && item.subscriptionId === receipt.subscriptionId);
+  if (confirming) {
+    if (subscription && ["cancelled","expired","superseded"].includes(subscription.status)) return "closed";
+    if (subscription && (["trialing","active"].includes(subscription.status) || (subscription.paid_until && Date.parse(subscription.paid_until)>now))) return "ready";
+    return "waiting";
+  }
   if (subscription?.status === "superseded") return "failed";
   if (hasAccess && !receipt.userId) return "ready";
   if (receipt.userId) {

@@ -33,9 +33,9 @@ export function parseBillingCatalog(value: unknown): { plans: BillingPlan[]; mod
   return { ...result.data, trial: result.data.trial ?? trialOff };
 }
 
-export type PendingPayment = { desktopRequest: string; subscriptionId?: string; startedAt?: number; requestId?: string; userId?: string; expiresAt?: number; checkout?: {reply: CheckoutReply; preparedAt: number; priceConfirmed?: boolean} };
+export type PendingPayment = { phase?: "confirming" | "dismissed"; confirmationStartedAt?: number; desktopRequest: string; subscriptionId?: string; startedAt?: number; requestId?: string; userId?: string; expiresAt?: number; checkout?: {reply: CheckoutReply; preparedAt: number; priceConfirmed?: boolean} };
 export function parsePendingPayment(value: unknown): PendingPayment | null {
-  const result = z.object({ desktopRequest: z.union([z.literal(""), z.uuidv4()]),
+  const result = z.object({ phase:z.enum(["confirming","dismissed"]).optional(),confirmationStartedAt:z.number().finite().nonnegative().optional(), desktopRequest: z.union([z.literal(""), z.uuidv4()]),
     subscriptionId: z.string().min(1).max(128).optional(),
     requestId: z.uuidv4().optional(), userId: z.string().min(1).max(128).optional(),
     expiresAt: z.number().finite().positive().optional(),
@@ -86,12 +86,14 @@ export type BillingPayment = {
 
 export const openCheckoutSchema = z.object({
   id:z.string().min(1), subscriptionId:z.string().min(1), requestId:z.string().min(1), accountId:z.string().min(1), planId:z.string().min(1), planName:z.string(), period:z.enum(["monthly","yearly"]), quantity:z.number().int().positive(),
+  confirming:z.boolean().optional(), confirmedAt:z.iso.datetime({offset:true}).nullable().optional(),
   couponCode:z.string().nullable(), paymentMethod:z.enum(["upi","card"]).nullable(), trial:z.boolean(), amountPaise:z.number().int().nonnegative(), currency:z.literal("INR"), keyId:z.string().nullable(), expiresAt:z.iso.datetime({offset:true}).nullable(), resumable:z.boolean(),
 });
 export type OpenCheckout = z.infer<typeof openCheckoutSchema>;
 
 export type BillingSnapshot = {
   openCheckouts?: OpenCheckout[];
+  confirmingCheckouts?: OpenCheckout[];
   betaInviteRequired?: boolean;
   trial?: BillingTrial;
   accounts: BillingAccount[]; subscriptions: BillingSubscription[];
@@ -117,6 +119,7 @@ export function parseBillingSnapshot(value: unknown): BillingSnapshot {
     subscriptions: z.array(z.object({ status: subscriptionStatusSchema, trial_ends_at: z.iso.datetime({ offset: true }).nullable().optional().catch(null),
       access_source: z.enum(["payment", "admin_coupon", "trial"]).optional() }).passthrough()),
     openCheckouts:z.array(openCheckoutSchema).optional().default([]),
+    confirmingCheckouts:z.array(openCheckoutSchema.extend({confirming:z.literal(true),confirmedAt:z.iso.datetime({offset:true})})).optional().default([]),
     betaInviteRequired: z.boolean().optional().default(false), trial: trialSchema.optional().catch(undefined),
   }).safeParse(value);
   if (!result.success) throw new Error("Your account returned unreadable billing details. Try refreshing your account.");

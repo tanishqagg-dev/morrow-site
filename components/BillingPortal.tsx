@@ -29,6 +29,8 @@ import { requestCheckoutOnce, type CheckoutExpiryState } from "@/lib/checkout-ex
 import { CheckoutExpiring } from "./CheckoutExpiring";
 import { selectOpenCheckout, openCheckoutReceipt, changeOpenCheckout } from "@/lib/open-checkout";
 import { OpenCheckoutPanel } from "./OpenCheckoutPanel";
+import { selectConfirmingCheckout, pollConfirmation, listenForReturn } from "@/lib/checkout-confirmation";
+import { BANK_CONFIRMATION_TIMEOUT_MS } from "@/lib/subscription-flow";
 import { subscriptionStatusLabel } from "@/lib/subscription-label";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
@@ -238,6 +240,12 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const checkoutFailure = useRef("");
   const [conflictingCheckout, setConflictingCheckout] = useState<OpenCheckout | null>(null);
   const openCheckout = selectOpenCheckout(snapshot, conflictingCheckout, selectedAccountId);
+  const confirmingCheckout = selectConfirmingCheckout(snapshot, conflictingCheckout, selectedAccountId);
+  const isConfirming = Boolean(confirmingCheckout || pendingReceipt.current?.phase === "confirming");
+  const confirmationSucceeded = Boolean(isConfirming && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && (item.razorpay_subscription_id === (confirmingCheckout?.subscriptionId || pendingReceipt.current?.subscriptionId)) && (["trialing","active"].includes(item.status) || (item.paid_until && Date.parse(item.paid_until)>Date.now()))));
+  const [confirmedSubscriptionId, setConfirmedSubscriptionId] = useState<string | null>(null);
+  const [confirmationTimedOut, setConfirmationTimedOut] = useState(false);
+  const [confirmationRevision, setConfirmationRevision] = useState(0);
   const [paymentRecovery, setPaymentRecovery] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelRetryId, setCancelRetryId] = useState<string | null>(null);
@@ -258,7 +266,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     }
   };
   useEffect(() => {
-    setConflictingCheckout(null);
+    setConflictingCheckout(null); setConfirmationTimedOut(false); setConfirmedSubscriptionId(null);
     setCheckoutExpiry(null); expiringRequest.current = null;
     setConfirmCancel(false); setError(""); setNotice(""); setPaymentRecovery(false); setCheckoutRecovery(null); checkoutFailure.current = "";
     try {
@@ -271,6 +279,12 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       setPaymentDesktopRequest(typeof receipt?.desktopRequest === "string" ? receipt.desktopRequest : "");
     } catch { pendingReceipt.current = null; setPaymentPending(false); setPaymentDesktopRequest(""); }
   }, [pendingKey]);
+  useEffect(() => {
+    if (!confirmingCheckout || !identity?.userId || confirmingCheckout.accountId !== selectedAccountId) return;
+    if (pendingReceipt.current?.subscriptionId === confirmingCheckout.subscriptionId && pendingReceipt.current.phase === "confirming") return;
+    pendingReceipt.current = {desktopRequest,subscriptionId:confirmingCheckout.subscriptionId,requestId:confirmingCheckout.requestId,userId:identity.userId,phase:"confirming",confirmationStartedAt:confirmingCheckout.confirmedAt ? Math.min(Date.now(),Date.parse(confirmingCheckout.confirmedAt)) : Date.now()};
+    rememberPendingPayment(true,confirmingCheckout.subscriptionId);setConfirmationTimedOut(false);setCheckoutRecovery(null);setPaymentRecovery(false);setConfirmationRevision(value=>value+1);
+  }, [confirmingCheckout?.subscriptionId, identity?.userId, pendingKey]);
   const [error, setError] = useState("");
   useEffect(() => {
     setAuthTimedOut(false);
@@ -630,12 +644,15 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
         setCheckoutRecovery(null);
         const details = response as { razorpay_payment_id?: string; razorpay_subscription_id?: string; razorpay_signature?: string };
-        rememberPendingPayment(true, result.subscriptionId);
+        if (pendingReceipt.current) {pendingReceipt.current.phase="confirming";pendingReceipt.current.confirmationStartedAt=Date.now();}
+        rememberPendingPayment(true, result.subscriptionId);setConfirmationTimedOut(false);setConfirmationRevision(value=>value+1);
         void run("confirm", async () => {
-          await billingRequest("billing-customer", {
+          const confirmation = await billingRequest<{verified:boolean;granted:boolean}>("billing-customer", {
             action: "confirm_checkout", subscriptionId: details.razorpay_subscription_id,
             paymentId: details.razorpay_payment_id, signature: details.razorpay_signature,
           }, await authToken());
+          if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
+          if (confirmation.granted) await pendingCheck.current();
           setNotice("");
         });
       },
@@ -643,6 +660,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         checkoutLock.current = false; setCheckoutOpen(false);
         if (checkoutUser === activeUserId.current && selectedAccount.id === selectedAccountRef.current && outcome !== "confirming") {
           if (outcome === "open") outcome = "closed";
+          if (pendingReceipt.current) pendingReceipt.current.phase="dismissed";
           setNotice("Checking your payment… Closing checkout does not confirm whether a payment went through.");
           void pendingCheck.current();
         }
@@ -798,17 +816,24 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       Boolean(latest && paidSeatForAccount(latest, accountId, identityRef.current?.email || null)));
     if (outcome === "uncertain") return uncertain();
     if (outcome === "closed") {
+      if (receipt.phase === "confirming") {receipt.phase="dismissed";setConfirmationTimedOut(false);}
       setPaymentPending(false); setCheckoutRecovery(checkoutFailure.current ? "failed" : "closed"); setError(""); setNotice("");
       return true;
     }
     if (outcome === "waiting") return false;
     if (outcome === "failed") return recover();
-    rememberPendingPayment(false);
+    setConfirmedSubscriptionId(receipt.subscriptionId || null);
+    setConflictingCheckout(null);rememberPendingPayment(false);setConfirmationTimedOut(false);
     if (latest && paymentDesktopRequest === desktopRequest) await connectAfterPayment(latest, accountId, userId);
     return true;
   };
   useEffect(() => {
     if (!paymentPending) return;
+    if (isConfirming) {
+      const userId=activeUserId.current,receipt=pendingReceipt.current,accountId=selectedAccountId;
+      const deadline=(receipt?.confirmationStartedAt || Date.now())+BANK_CONFIRMATION_TIMEOUT_MS;
+      return pollConfirmation(()=>pendingCheck.current(),()=>userId===activeUserId.current && accountId===selectedAccountRef.current,deadline,()=>{setConfirmationTimedOut(true);setPaymentPending(false);});
+    }
     let stopped = false;
     let attempt = 0;
     let timer: ReturnType<typeof setTimeout>;
@@ -819,10 +844,20 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     };
     timer = setTimeout(check, 1500);
     return () => { stopped = true; clearTimeout(timer); };
-  }, [paymentPending, pendingKey]);
+  }, [paymentPending, pendingKey, isConfirming, confirmationRevision]);
 
   const stage = subscriptionStage({ loadFailed: authTimedOut || snapshotFailed, loaded: identity?.loaded !== false, signedIn, snapshotLoaded: snapshot !== null,
-    hasPaidAccess, paymentPending: paymentPending && !checkoutRecovery && !openCheckout, paymentRecovery, manageAccount, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
+    hasPaidAccess: confirmationSucceeded || Boolean(confirmedSubscriptionId && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === confirmedSubscriptionId && ["trialing", "active"].includes(item.status))) || (hasPaidAccess && !isConfirming), paymentPending: isConfirming || (paymentPending && !checkoutRecovery && !openCheckout), paymentRecovery: paymentRecovery && !isConfirming, manageAccount: manageAccount && !isConfirming, inviteRequired: snapshot?.betaInviteRequired === true, inviteAccepted });
+
+  const checkConfirmationAgain = () => {
+    if (!isConfirming) {void refreshAccess();return;}
+    if (pendingReceipt.current) {pendingReceipt.current.confirmationStartedAt=Date.now();rememberPendingPayment(true,pendingReceipt.current.subscriptionId);}
+    setConfirmationTimedOut(false);setPaymentPending(true);setConfirmationRevision(value=>value+1);void pendingCheck.current();
+  };
+  useEffect(() => {
+    if (!signedIn) return;
+    return listenForReturn(window, document, () => {void (pendingReceipt.current ? pendingCheck.current() : refresh()).catch(()=>{});});
+  }, [signedIn, pendingKey, refresh]);
 
   const changeServerCheckoutPlan = () => void run("abandon", async () => {
     const checkout = openCheckout, userId = activeUserId.current, accountId = selectedAccountRef.current;
@@ -959,10 +994,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     canConnect={claimableSeats.some(seat => seat.account_id === selectedAccountId)} onForget={forgetDesktop}
     onConnect={(userCode, replace) => { const seat = claimableSeats.find(item => item.account_id === selectedAccountId); if (seat) connectDesktop(seat, userCode, replace); }} /> : undefined;
 
-  return <BillingJourney desktopConsent={desktopConsent} authTitle={authTitle} authContent={authContent} accountControl={accountControl} stage={stage} email={identity?.email || null} desktopRequest={Boolean(desktopRequest)}
+  return <BillingJourney confirmationTimedOut={confirmationTimedOut} desktopConsent={desktopConsent} authTitle={authTitle} authContent={authContent} accountControl={accountControl} stage={stage} email={identity?.email || null} desktopRequest={Boolean(desktopRequest)}
     desktopConnected={desktopConnected} busy={Boolean(busy) || desktopConnecting} error={error} notice={notice}
     onRetryPayment={() => { setPaymentRecovery(false); setManageAccount(false); setPreparedCheckout(null); setError(""); setNotice(""); void refreshAccess(); }}
-    signInAvailable={Boolean(identity)} onSignIn={signIn} onRefresh={refreshAccess}
+    signInAvailable={Boolean(identity)} onSignIn={signIn} onRefresh={checkConfirmationAgain}
     onSignOut={() => { forgetDesktop(); void identity?.signOut(); }} onAccount={() => setManageAccount(true)}
     onBack={() => { setManageAccount(false); setConfirmCancel(false); }}
     canConnect={claimableSeats.some((seat) => seat.account_id === selectedAccountId)}
@@ -978,13 +1013,13 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       </form>
       <p className={styles.supportNote}>No invitation yet? <a href="/contact">Request beta access</a>.</p>
     </section>}
-    {signedIn && openCheckout && <OpenCheckoutPanel checkout={openCheckout} busy={Boolean(busy) || checkoutOpen}
+    {signedIn && openCheckout && !isConfirming && <OpenCheckoutPanel checkout={openCheckout} busy={Boolean(busy) || checkoutOpen}
       onResume={() => startCheckout(true, openCheckout)} onChangePlan={changeServerCheckoutPlan} />}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
       {checkoutExpiry && <CheckoutExpiring state={checkoutExpiry} busy={Boolean(busy)} onRetry={() => startCheckout()} />}
-      {checkoutRecovery && !openCheckout && !snapshot?.subscriptions.some(item => item.status === "superseded" && (item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId || item.id === pendingReceipt.current?.subscriptionId)) && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
+      {checkoutRecovery && !isConfirming && !openCheckout && !snapshot?.subscriptions.some(item => item.status === "superseded" && (item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId || item.id === pendingReceipt.current?.subscriptionId)) && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
         canResume={Boolean(pendingReceipt.current?.checkout && pendingReceipt.current.checkout.priceConfirmed !== false && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId && item.status === "created") && !trialAuthorizationExpired(pendingReceipt.current.checkout.reply, pendingReceipt.current.checkout.preparedAt, clock))}
-        onResume={() => startCheckout(true)} onChangePlan={changeCheckoutPlan} onRefresh={refreshAccess} />}
+        onResume={() => startCheckout(true)} onChangePlan={changeCheckoutPlan} onRefresh={checkConfirmationAgain} />}
       <h1 id="plan-title">{trialEligible ? `Start your ${snapshot?.trial?.days || trialConfig.days}-day free trial.` : "Subscribe to Morrow."}</h1>
       <p className={styles.subtitle}>{trialEligible ? "Authorize your bank, then Morrow unlocks on your Mac." : "Your voice workspace on your Mac."}</p>
       <fieldset disabled={Boolean(pendingReceipt.current && !openCheckout) || Boolean(checkoutExpiry)} className={styles.planFieldset}>

@@ -23,7 +23,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
   let pending: Promise<void>;
   const open = vi.fn();
   const bindings = {
-    openCheckoutReceipt, setConflictingCheckout:vi.fn(), requestCheckoutOnce, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
+    openCheckoutReceipt, setConflictingCheckout:vi.fn(), setConfirmedSubscriptionId:vi.fn(), setConfirmationTimedOut:vi.fn(), setConfirmationRevision:vi.fn(), requestCheckoutOnce, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
     pendingReceipt: {current:null}, pendingCheck: {current:vi.fn()}, checkoutFailure:{current:""}, setCheckoutRecovery:vi.fn(), setPaymentPending:vi.fn(),
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
@@ -46,7 +46,7 @@ const snapshot = (status: string, accountId = 'account') => ({ subscriptions: [{
 function confirmationFlow(status = 'expired', startedAt = now) {
   const saved = { ...receipt, startedAt };
   const bindings = {
-    pendingCheck: { current: async () => false }, activeUserId: { current: 'user' }, selectedAccountId: 'account',
+    setConflictingCheckout:vi.fn(), setConfirmedSubscriptionId:vi.fn(), setConfirmationTimedOut:vi.fn(), pendingCheck: { current: async () => false }, activeUserId: { current: 'user' }, selectedAccountId: 'account',
     selectedAccountRef: { current: 'account' }, identityRef: { current: { email: 'me@example.com' } },
     pendingReceipt: { current: saved as typeof saved | null }, pendingPaymentOutcome,
     refresh: vi.fn(async () => snapshot(status)), paidSeatForAccount: vi.fn(() => undefined as object | undefined),
@@ -264,3 +264,14 @@ it('BROWSER-05 opens the exact server subscription despite a stale local recover
 it('BROWSER-05 displays the server conflict instead of a bare checkout error',async()=>{
  const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest:vi.fn(async(_endpoint,body)=>{if(body.action==='checkout')throw new BillingError('Unfinished','OPEN_CHECKOUT',undefined,serverOpen);return {};})});await flow.start();expect(flow.setConflictingCheckout).toHaveBeenCalledWith(serverOpen);expect(flow.open).not.toHaveBeenCalled();
 });
+
+ it('SITE-TRIAL-CLOSED-RACE the actual success handler marks confirmation before the bank request and refreshes granted access',async()=>{
+  let handler:any;const pendingReceipt={current:null as any};const check=vi.fn(async()=>true);
+  const flow=checkoutFlow(reply(),now,{pendingReceipt,rememberPendingPayment:vi.fn((pending,subscriptionId)=>{if(pending)pendingReceipt.current={...pendingReceipt.current,subscriptionId,userId:'user',desktopRequest:''};}),pendingCheck:{current:check},window:{Razorpay:class {constructor(options:any){handler=options.handler;}open(){}on(){}}},billingRequest:vi.fn(async(_endpoint,body)=>{if(body.action==='confirm_checkout'){expect(pendingReceipt.current.phase).toBe('confirming');return {verified:true,granted:true,message:'Live'};}return {};})});
+  await flow.start();await handler({razorpay_subscription_id:'sub-new',razorpay_payment_id:'pay_test',razorpay_signature:'signature'});await Promise.resolve();await Promise.resolve();expect(check).toHaveBeenCalledOnce();expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true,'sub-new');
+ });
+ it('SITE-TRIAL-CLOSED-RACE the actual snapshot check keeps created pending until trialing',async()=>{
+  const flow=confirmationFlow('created');Object.assign(flow.pendingReceipt.current!,{phase:'confirming',userId:'user'});
+  for(let attempt=0;attempt<3;attempt++){expect(await flow.pendingCheck.current()).toBe(false);expect(flow.setCheckoutRecovery).not.toHaveBeenCalled();}
+  flow.refresh.mockResolvedValue(snapshot('trialing'));expect(await flow.pendingCheck.current()).toBe(true);expect(flow.setConfirmedSubscriptionId).toHaveBeenCalledWith('sub-provider');expect(flow.rememberPendingPayment).toHaveBeenCalledWith(false);
+ });

@@ -18,7 +18,7 @@ test('subscription link opens management and account switches preserve the chose
     const context = { pendingKey: 'pending:user:account', URLSearchParams, window: { location: { search } },
       useEffect: (callback: () => void) => callback(), sessionStorage: { getItem: () => null }, parsePendingPayment: () => null,
       setManageAccount: (value: boolean) => { management = value; },
-      setConflictingCheckout(){}, expiringRequest:{current:null}, setCheckoutExpiry(){}, pendingReceipt: { current: null }, checkoutFailure:{current:""},setCheckoutRecovery() {}, setPaymentRecovery() {}, setConfirmCancel() {}, setError() {}, setNotice() {}, setPaymentPending() {}, setPaymentDesktopRequest() {},
+      setConfirmationTimedOut(){}, setConfirmedSubscriptionId(){}, setConflictingCheckout(){}, expiringRequest:{current:null}, setCheckoutExpiry(){}, pendingReceipt: { current: null }, checkoutFailure:{current:""},setCheckoutRecovery() {}, setPaymentRecovery() {}, setConfirmCancel() {}, setError() {}, setNotice() {}, setPaymentPending() {}, setPaymentDesktopRequest() {},
     };
     const marker = 'setManageAccount(new URLSearchParams(window.location.search).get("view") === "subscription");';
     const start = source.lastIndexOf('useEffect(() => {', source.indexOf(marker));

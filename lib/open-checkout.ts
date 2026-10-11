@@ -1,7 +1,7 @@
 import type {BillingSnapshot,OpenCheckout,PendingPayment} from './billing';
 import {abandonCheckout} from './checkout-recovery';
 export function selectOpenCheckout(snapshot:{openCheckouts?:OpenCheckout[]}|null,conflict:OpenCheckout|null,accountId:string):OpenCheckout|null {
- return snapshot?.openCheckouts?.find(item=>item.accountId===accountId) || (conflict?.accountId===accountId?conflict:null);
+ return snapshot?.openCheckouts?.find(item=>item.accountId===accountId && !item.confirming) || (conflict?.accountId===accountId && !conflict.confirming?conflict:null);
 }
 export function openCheckoutReceipt(checkout:OpenCheckout,account:{billing_email:string;name:string;invoice_recipient_name?:string|null},userId:string,desktopRequest:string):PendingPayment {
  if(!checkout.resumable || !checkout.keyId || (checkout.expiresAt && Date.parse(checkout.expiresAt)<=Date.now()+60_000))throw new Error('This checkout expired at Razorpay. Change plan to start again.');
