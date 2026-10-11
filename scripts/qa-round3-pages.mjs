@@ -2,7 +2,8 @@ import { chromium } from '/Users/tanishqaggarwal/Documents/ChatGPT/3.0/nivra-vis
 import { mkdir, writeFile } from 'node:fs/promises';
 const round2 = false;
 let motion = 'no-preference';
-const evidence = '/Users/tanishqaggarwal/Desktop/projects/morrow-glowup/qa/round3/pages';
+const evidence = process.env.QA_EVIDENCE || '/Users/tanishqaggarwal/Desktop/projects/morrow-glowup/qa/round3/pages';
+const reviewOnly = process.env.QA_REVIEW_ONLY === '1';
 await mkdir(evidence, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const plan = { id: 'qa-plan', code: 'PERSONAL_MONTHLY', name: 'Morrow Personal', audience: 'personal', period: 'monthly', amountPaise: 299900, chargeAmountPaise: 353882, currency: 'INR', minimumQuantity: 1 };
@@ -50,7 +51,7 @@ async function setup(state, width) {
     else if (action === 'approve_desktop') { approvals++; payload = {}; }
     else if (action === 'cancel') { cancelCount++; if (state === 'cancel-failed' && cancelCount === 1) return route.fulfill({status:409,json:{error:{code:'CANCELLATION_VERIFICATION_FAILED',message:'Unconfirmed cancellation.'}}}); canceled = true; payload = {}; }
     else if (action === 'quote_coupon') payload = {code:body.couponCode,unitAmountPaise:2119,chargeAmountPaise:2500,renewalAmountPaise:353882,duration:'first_cycle',paymentMethods:['upi','card']};
-    else if (action === 'invoices') payload = { invoices: [{ id: 'invoice-a', number: 'MOR-001', status: 'paid', amountPaise: 353882, paidAt: date, url: 'https://example.test/invoice' }] };
+    else if (action === 'invoices') payload = { invoices: state !== 'paid' ? [] : [{ id: 'invoice-a', number: 'MOR-001', status: 'paid', amountPaise: 353882, paidAt: date, url: 'https://example.test/invoice' }] };
     await route.fulfill({ json: payload });
   });
   await page.route('https://checkout.razorpay.com/v1/checkout.js', route => route.fulfill({ contentType: 'text/javascript', body: `window.Razorpay = class { constructor(options) { window.__qaCheckout = options; } open() { window.__qaCheckout.handler({razorpay_subscription_id:'sub_qa',razorpay_payment_id:'pay_qa',razorpay_signature:'qa'}); } on() {} }` }));
@@ -79,10 +80,10 @@ try {
 for (const pass of ['no-preference','reduce']) { motion=pass;
 for (const width of process.env.QA_WIDTH ? [Number(process.env.QA_WIDTH)] : [1440, 390]) {
   if (process.env.QA_AUTH_ONLY !== '1') {
-  for (const route of process.env.QA_DOWNLOAD_ONLY === '1' ? [] : process.env.QA_OPTIONS_ONLY === '1' ? ['operator','terms'] : ['privacy','terms','refunds','contact','thanks','windows-setup','open-source','operator','not-a-real-page']) {
+  for (const route of process.env.QA_DOWNLOAD_ONLY === '1' || reviewOnly ? [] : process.env.QA_OPTIONS_ONLY === '1' ? ['operator','terms'] : ['privacy','terms','refunds','contact','thanks','windows-setup','open-source','operator','not-a-real-page']) {
     const flow=await setup(route,width);await flow.page.goto(`http://localhost:4390/${route}`);await flow.page.locator('h1').first().waitFor();await capture(flow,route,width,route==='not-a-real-page'?'404':route);await flow.context.close();
   }
-  for (const state of process.env.QA_OPTIONS_ONLY === '1' ? [] : desktopOnly ? [] : round2 ? ['download-trial-on', 'trial-off'] : ['download', 'download-started','trial-off']) {
+  for (const state of process.env.QA_OPTIONS_ONLY === '1' ? [] : desktopOnly ? [] : reviewOnly ? ['download-started'] : round2 ? ['download-trial-on', 'trial-off'] : ['download', 'download-started','trial-off']) {
     const flow = await setup(state, width); await flow.page.goto(`http://localhost:4390/download${round2 || state !== 'download' ? '?start=1' : ''}`);
     await flow.page.getByRole('heading', { name: round2 || state !== 'download' ? 'Your download has started' : 'Download Morrow for Mac', exact: true }).waitFor();
     if (round2) { await flow.page.getByText(state === 'trial-off' ? 'Press \"Subscribe\".' : 'Press \"Start free trial\".', {exact:false}).waitFor(); if (state === 'trial-off') await flow.page.getByRole('heading',{name:'Setup walkthrough.'}).waitFor(); else if (await flow.page.getByRole('heading',{name:'Setup walkthrough.'}).count()) throw new Error('Old checkout video shown during trial'); }
@@ -95,7 +96,7 @@ for (const width of process.env.QA_WIDTH ? [Number(process.env.QA_WIDTH)] : [144
     if (state === 'download' && motion === 'no-preference') { await flow.page.keyboard.press('Tab'); await flow.page.getByRole('button',{name:'Download for Mac',exact:false}).focus(); if (await flow.page.evaluate(() => getComputedStyle(document.activeElement).outlineWidth === '0px')) throw new Error('Download keyboard focus is invisible'); await capture(flow,state,width,'download-keyboard-focus'); }
     await flow.context.close();
   }
-  for (const state of process.env.QA_DOWNLOAD_ONLY === '1' ? [] : process.env.QA_OPTIONS_ONLY === '1' ? ['trial-off'] : desktopOnly ? ['trial'] : round2 ? ['trial','trial-off','cancel-failed'] : ['closed','loading','error','invite','trial-off','trial','ineligible','empty','trialing','trial-canceled','paid','expired','ready','cancel','cancel-failed','rejected-trial','expired-checkout','confirmation-failed','confirmation-timeout','company']) {
+  for (const state of process.env.QA_DOWNLOAD_ONLY === '1' ? [] : process.env.QA_OPTIONS_ONLY === '1' ? ['trial-off'] : desktopOnly ? ['trial'] : reviewOnly ? ['trialing','trial-canceled','paid','expired','cancel-failed'] : round2 ? ['trial','trial-off','cancel-failed'] : ['closed','loading','error','invite','trial-off','trial','ineligible','empty','trialing','trial-canceled','paid','expired','ready','cancel','cancel-failed','rejected-trial','expired-checkout','confirmation-failed','confirmation-timeout','company']) {
     const flow = await setup(state, width);
     const accountView = ['trialing','trial-canceled','paid','expired','cancel','cancel-failed','company'].includes(state);
     const desktop = state === 'trial' || state === 'ready' || desktopOnly || (round2 && state === 'trial') ? `&desktop=${desktopId}` : '';
@@ -103,6 +104,7 @@ for (const width of process.env.QA_WIDTH ? [Number(process.env.QA_WIDTH)] : [144
     const titles = { closed: 'Your work, with Morrow.', loading: 'Getting your account ready.', error: 'Your account could not be loaded.', invite: 'Your invitation to Morrow.', ready: "You're in. Morrow is unlocking now." };
     await flow.page.getByRole('heading', { name: titles[state] || (accountView ? 'Your subscription' : ['trial-off','ineligible'].includes(state) ? 'Subscribe to Morrow.' : 'Start your 7-day free trial.'), exact: true }).waitFor();
     await capture(flow, state, width, `subscribe-${state}`);
+    if (reviewOnly && ['trialing','trial-canceled','expired'].includes(state)) { await flow.page.getByText('Payments and invoices',{exact:true}).click(); if(state==='trialing') await flow.page.getByText('No payments yet. Your first invoice appears after',{exact:false}).waitFor(); await capture(flow,state,width,`subscribe-${state}-invoices-empty`); }
     if (state === 'trial-off' && process.env.QA_OPTIONS_ONLY === '1') {
       await flow.page.getByText('Business invoice (optional)',{exact:true}).click();await flow.page.getByLabel('Add my business GSTIN').check();await capture(flow,state,width,'subscribe-business-invoice-options');
       await flow.page.getByLabel('Add my business GSTIN').uncheck();await flow.page.getByText('Business invoice (optional)',{exact:true}).click();
@@ -144,7 +146,7 @@ for (const width of process.env.QA_WIDTH ? [Number(process.env.QA_WIDTH)] : [144
     if (state === 'cancel') { await flow.page.getByRole('button', { name: 'Cancel trial', exact:true }).click(); await capture(flow,state,width,'subscribe-cancel-confirmation'); await flow.page.getByRole('button',{name:'Cancel trial',exact:true}).click(); await flow.page.getByText("Trial canceled. Access until",{exact:false}).waitFor(); await capture(flow,state,width,'subscribe-cancel-complete'); }
     if (state === 'ready') { await flow.page.locator('a[href="morrow://auth-complete"]').waitFor(); if(flow.approvals !== 1) throw new Error('Desktop must approve once'); }
     if(state==='company'){await flow.page.getByText('Manage team seats',{exact:true}).click();await capture(flow,state,width,'subscribe-team-seats');}
-    if (state === 'paid') { await flow.page.getByText('Payments and invoices',{exact:true}).waitFor(); await flow.page.getByRole('button',{name:'Load invoices'}).click(); await flow.page.getByText('MOR-001').waitFor(); await capture(flow,state,width,'subscribe-invoices'); }
+    if (state === 'paid') { await flow.page.getByText('Payments and invoices',{exact:true}).waitFor(); await flow.page.getByText('Payments and invoices',{exact:true}).click(); await flow.page.getByText('MOR-001').waitFor(); await capture(flow,state,width,'subscribe-invoices'); }
     await flow.context.close();
   }
   }

@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClerkProvider, SignUp, SignIn, UserButton, useAuth, useClerk, useUser } from "@clerk/react";
-import { ArrowRight, CheckCircle, CreditCard, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowRight, CheckCircle, CreditCard, SpinnerGap, ArrowClockwise } from "@phosphor-icons/react";
 import { BillingError, parseCheckoutReply, billingQuote, firstPaymentQuote, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, rupees } from "@/lib/billing";
 import type { BillingTrial, CheckoutReply, BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription } from "@/lib/billing";
 import styles from "./SubscriptionFlow.module.css";
@@ -66,7 +66,7 @@ export function BillingPortal() {
       formFieldCheckboxInput__legalAccepted: { margin: 0, flexShrink: 0, borderRadius: "4px" },
       formFieldCheckboxLabel: { margin: 0, lineHeight: "20px" },
       socialButtonsBlockButton: { width: "100%", color: "#111111", border: "1px solid #D4D4D4", borderRadius: "12px", minHeight: "48px", boxShadow: "none", background: "#ffffff" },
-      formButtonPrimary: { boxShadow: "none", minHeight: "50px", borderRadius: "999px" },
+      formButtonPrimary: { background: "#F5D33F", backgroundImage: "none", color: "#0A0A0A", boxShadow: "none", minHeight: "50px", borderRadius: "999px", "&::before": { display: "none", background: "none", backgroundImage: "none", boxShadow: "none" }, "&::after": { display: "none", background: "none !important", backgroundImage: "none !important", boxShadow: "none" }, "&:after": { display: "none", background: "none !important", backgroundImage: "none !important", boxShadow: "none" } },
       socialButtonsBlockButtonText: { color: "#111111" },
       footerActionLink: { color: "#111111", fontWeight: 700 },
     },
@@ -620,7 +620,6 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         billingRequest<{invoices:typeof invoices}>("billing-customer", {action:"invoices",subscriptionId:sub.id}, token)));
       if (!stillSelected()) return;
       setInvoices(results.flatMap(result => result.invoices));
-      if (!results.some(result => result.invoices.length)) setNotice("No invoices have been issued yet.");
     } catch (caught) { if (stillSelected()) throw caught; }
   });
 
@@ -721,14 +720,13 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
       </select></label>}
       <div className={styles.accountSummary}>
-        <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><span>{hasPaidAccess ? currentSubscription?.status === "trialing" ? "Trial" : currentSubscription?.status === "trial_canceled" ? "Trial canceled" : "Active" : currentSubscription ? "Expired" : "Not subscribed"}</span></div>
+        <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><div className={styles.planControls}><span className={styles.statusPill}>{currentSubscription?.status === "trialing" ? "Trial" : currentSubscription?.status === "trial_canceled" || currentSubscription?.cancel_at_period_end || currentSubscription?.status === "cancelled" ? "Canceled" : currentSubscription && ["halted", "pending", "paused"].includes(currentSubscription.status) ? "Payment issue" : hasPaidAccess ? "Active" : currentSubscription ? "Expired" : "Not subscribed"}</span><button className={styles.iconButton} aria-label="Refresh subscription" title="Refresh subscription" onClick={refreshAccess} disabled={Boolean(busy)}><ArrowClockwise className={busy === "refresh" ? styles.spin : undefined} size={18} /></button></div></div>
         {hasPaidAccess && currentSubscription ? <>
-          <p>{currentSubscription.status === "trial_canceled" ? `Trial canceled. Access until ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. You won't be charged.` : currentSubscription.status === "trialing" ? `Trial ends ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. First charge ${rupees((currentSubscription.plan.charge_amount_paise ?? billingQuote(currentSubscription.plan.amount_paise).total) * currentSubscription.quantity)}.` : currentSubscription.access_source === "admin_coupon" ? "Complimentary access" : `${rupees((currentSubscription.plan.charge_amount_paise ?? billingQuote(currentSubscription.plan.amount_paise).total) * currentSubscription.quantity)} including GST, billed ${currentSubscription.plan.period}`}</p>
-          <p role="timer">{Math.max(0, Math.floor((Date.parse(currentSubscription.paid_until!) - clock) / 86400000))} days, {Math.max(0, Math.floor((Date.parse(currentSubscription.paid_until!) - clock) / 3600000) % 24)} hours of access remaining</p>
-          <dl className={styles.total}><div><dt>{currentSubscription.status === "trialing" ? "First charge" : currentSubscription.status === "trial_canceled" || currentSubscription.cancel_at_period_end || currentSubscription.access_source === "admin_coupon" ? "Access until" : "Next charge"}</dt><dd>{day(currentSubscription.paid_until)}</dd></div></dl>
+          <p>{currentSubscription.status === "trial_canceled" ? `Trial canceled. Access until ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. You won't be charged.` : currentSubscription.status === "trialing" ? `${Math.max(0, Math.ceil((Date.parse(currentSubscription.trial_ends_at || currentSubscription.paid_until!) - clock) / 86400000))} days left · first charge ${rupees((currentSubscription.plan.charge_amount_paise ?? billingQuote(currentSubscription.plan.amount_paise).total) * currentSubscription.quantity)} on ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : currentSubscription.access_source === "admin_coupon" ? "Complimentary access" : `${rupees((currentSubscription.plan.charge_amount_paise ?? billingQuote(currentSubscription.plan.amount_paise).total) * currentSubscription.quantity)} including GST, billed ${currentSubscription.plan.period}`}</p>
+          {currentSubscription.status !== "trialing" && <dl className={styles.total}><div><dt>{currentSubscription.status === "trial_canceled" || currentSubscription.cancel_at_period_end || currentSubscription.access_source === "admin_coupon" ? "Access until" : "Next charge"}</dt><dd>{day(currentSubscription.paid_until)}</dd></div></dl>}
           {currentSubscription.cancel_at_period_end && <p className={styles.notice}>{currentSubscription.access_source === "admin_coupon" ? "This access does not renew." : "Renewal is cancelled. You can keep using Morrow until this date."}</p>}
           {currentSubscription.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && currentSubscription.status !== "trial_canceled" && <>
-            {!confirmCancel ? <button className={styles.textButton} onClick={() => setConfirmCancel(true)}>{currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel subscription"}</button> : <div className={styles.cancelConfirmation}>
+            {!confirmCancel ? <button className={styles.quietButton} onClick={() => setConfirmCancel(true)}>{currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel subscription"}</button> : <div className={styles.cancelConfirmation}>
               <h3>{currentSubscription.status === "trialing" ? "Cancel your trial?" : "Cancel renewal?"}</h3><p>You can keep using Morrow until {day(currentSubscription.paid_until)}. {currentSubscription.status === "trialing" ? "If confirmed, your first charge will be canceled." : "If confirmed, there will be no further renewals."}</p>
               <div className={styles.inputRow}><button onClick={() => { setConfirmCancel(false); setCancelRetryId(null); setError(""); }} disabled={Boolean(busy)}>Keep subscription</button><button onClick={() => changeSubscription("cancel", currentSubscription)} disabled={Boolean(busy)}>{busy === "cancel" ? "Cancelling…" : cancelRetryId === currentSubscription.id ? "Retry cancellation" : currentSubscription.status === "trialing" ? "Cancel trial" : "Cancel renewal"}</button></div>
             </div>}
@@ -742,16 +740,15 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || seats === currentSubscription.quantity}>Update seats</button>}
       </details>}
       <p className={styles.paymentMethod}><strong>Payment method</strong>Morrow does not store your card or UPI details. Razorpay manages your AutoPay authorization.</p>
-      <details className={styles.management} open><summary>Payments and invoices</summary>
-        <button disabled={Boolean(busy)} onClick={loadInvoices}>{busy === "invoices" ? "Loading invoices…" : "Load invoices"}</button>
+      <details className={styles.management} key={selectedAccountId} onToggle={event => { if (event.currentTarget.open && !busy) loadInvoices(); }}><summary>Payments and invoices</summary>
+        {busy === "invoices" && <p role="status">Loading invoices…</p>}
         {invoices.length > 0 && <div className={styles.tableScroll}><table className={styles.invoiceTable}><caption className={styles.srOnly}>Morrow invoices</caption><thead><tr><th scope="col">Invoice</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Receipt</th></tr></thead><tbody>
           {invoices.map(invoice => <tr key={invoice.id}><td>{invoice.number}<small>{invoice.paidAt ? day(invoice.paidAt) : "Not paid"}</small></td><td>{rupees(invoice.amountPaise)}</td><td>{invoice.status}</td><td>{invoice.url ? <a href={invoice.url} target="_blank" rel="noopener noreferrer">View invoice</a> : "Unavailable"}</td></tr>)}
         </tbody></table></div>}
-        {(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).length === 0 ? <p>No payments yet.</p> :
+        {(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).length === 0 ? invoices.length === 0 && busy !== "invoices" && <p>No payments yet.{currentSubscription?.status === "trialing" && (currentSubscription.trial_ends_at || currentSubscription.paid_until) ? ` Your first invoice appears after ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : ""}</p> :
           <div className={styles.tableScroll}><table className={styles.invoiceTable}><caption className={styles.srOnly}>Morrow payment history</caption><thead><tr><th scope="col">Date</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).map((payment) => <tr key={payment.id}><td>{day(payment.paid_at)}<small>Payment ID: {payment.razorpay_payment_id}</small></td><td>{rupees(payment.amount_paise)}</td><td>{payment.status}</td></tr>)}</tbody></table></div>}
       </details>
-      <p className={styles.supportNote}>Need a refund? <a href={`mailto:${siteConfig.supportEmail}?subject=Morrow%20refund%20request`}>Contact support</a> within 7 days of your first payment. <a href="/refunds">See the policy</a>.</p>
-      <button className={styles.textButton} onClick={refreshAccess} disabled={Boolean(busy)}>{busy === "refresh" ? "Checking…" : "Refresh subscription"}</button>
+      <p className={styles.refundNote}>Need a refund? <a href={`mailto:${siteConfig.supportEmail}?subject=Morrow%20refund%20request`}>Contact support</a> within 7 days of your first payment. <a href="/refunds">See the policy</a>.</p>
     </section>}
   </BillingJourney>;
 }

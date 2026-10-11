@@ -41,7 +41,8 @@ export function DownloadSteps() {
       const distance = end.left + end.width / 2 - start.left - start.width / 2;
       gsap.timeline({ defaults: { ease: 'power3.inOut' }, delay: .6 })
         .to('[data-install-pointer]', { opacity: 1, duration: .2 })
-        .to(moving, { x: distance, y: -10, scale: .85, duration: 1.3 })
+        .to('[data-install-source]', { opacity: .25, duration: .2 })
+        .to(moving, { x: distance, y: -10, scale: .85, duration: 1.3 }, '<')
         .to('[data-install-pointer]', { x: distance, y: -10, duration: 1.3 }, '<')
         .to(moving, { opacity: 0, duration: .25 })
         .to('[data-install-complete]', { opacity: 1, duration: .3 }, '<')
@@ -57,7 +58,7 @@ export function DownloadSteps() {
           <div className={styles.drive} aria-hidden="true"><svg viewBox="0 0 80 88"><rect x="12" y="6" width="56" height="72" rx="8" fill="#EBEBEB" stroke="#A3A3A3"/><path d="M20 60h40v10H20Z" fill="#D4D4D4"/><path d="M40 24v24m-10-10 10 10 10-10" fill="none" stroke="#525252" strokeWidth="3"/></svg></div>
           <strong>Morrow.dmg</strong><p>Double-click to open</p>
         </div> : step === 1 ? <div className={styles.dragScene}>
-          <div className={styles.appSource}><img className={styles.sourceIcon} src="/morrow/mark-small.png" alt="" width="88" height="88" /><div data-drag-app className={styles.dragApp}><img src="/morrow/mark-small.png" alt="" width="88" height="88" /></div><svg data-install-pointer className={styles.installPointer} viewBox="0 0 24 32"><path d="m2 2 19 18-9 1-4 8Z" fill="#0A0A0A" stroke="#FFF" strokeWidth="2"/></svg><span>Morrow</span></div>
+          <div className={styles.appSource}><img data-install-source className={styles.sourceIcon} src="/morrow/mark-small.png" alt="" width="88" height="88" /><div data-drag-app className={styles.dragApp}><img src="/morrow/mark-small.png" alt="" width="88" height="88" /></div><svg data-install-pointer className={styles.installPointer} viewBox="0 0 24 32"><path d="m2 2 19 18-9 1-4 8Z" fill="#0A0A0A" stroke="#FFF" strokeWidth="2"/></svg><span>Morrow</span></div>
           <svg className={styles.dragArrow} viewBox="0 0 80 24" aria-hidden="true"><path d="M2 12h72M63 3l12 9-12 9" stroke="#A3A3A3" strokeWidth="2" fill="none"/></svg>
           <div className={styles.folderTarget}><div data-applications><Folder /></div><span>Applications</span><span className={styles.installComplete} data-install-complete aria-hidden="true">✓ Copied</span></div>
         </div> : <img className={styles.appCapture} src="/screens/install-welcome.png" alt="Morrow's welcome screen, with the Get started button" width="1440" height="900" />}

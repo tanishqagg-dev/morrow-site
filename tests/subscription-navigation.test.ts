@@ -134,3 +134,12 @@ test('account refresh scopes recovery to the selected account and keeps initial 
     }, 'test-session');
   }
 });
+
+test('an empty invoice response clears rows without creating a second empty-state notice', async () => {
+  const flow = invoiceFlow();
+  flow.billingRequest.mockResolvedValue({ invoices: [] });
+  flow.load();
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  expect(flow.setInvoices).toHaveBeenCalledWith([]);
+  expect(flow.setNotice).not.toHaveBeenCalled();
+});
