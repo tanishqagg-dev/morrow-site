@@ -1,9 +1,9 @@
 "use client";
 
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ClerkProvider, SignUp, SignIn, UserButton, useAuth, useClerk, useUser } from "@clerk/react";
+import { ClerkProvider, SignUp, SignIn, UserButton, useAuth, useClerk, useUser, useReverification } from "@clerk/react";
 import { ArrowRight, CheckCircle, CreditCard, SpinnerGap, ArrowClockwise } from "@phosphor-icons/react";
-import { BillingError, parseCheckoutReply, billingQuote, firstPaymentQuote, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, rupees } from "@/lib/billing";
+import { isReverificationHint, BillingError, parseCheckoutReply, billingQuote, firstPaymentQuote, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, rupees } from "@/lib/billing";
 import type { BillingTrial, CheckoutReply, BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription } from "@/lib/billing";
 import styles from "./SubscriptionFlow.module.css";
 import { BillingJourney } from "./BillingJourney";
@@ -35,6 +35,7 @@ type CustomerIdentity = {
   getToken: () => Promise<string | null>;
   openSignIn: () => void;
   signOut: () => Promise<void>;
+  sensitiveMutation?: (body: object, expectedUserId: string) => Promise<unknown>;
 };
 
 const DevFixture = process.env.NODE_ENV === "development" ? lazy(() => import("./BillingDevFixture").then(module => ({ default: module.BillingDevFixture }))) : null;
@@ -105,7 +106,14 @@ function ClerkBillingPortal() {
     }
     previousUserId.current = userId || null;
   }, [isLoaded, userId]);
+  const reverifiedMutation = useReverification(async (body: object, expectedUserId: string) => {
+    if (!userId || userId !== expectedUserId) throw new Error("Your account changed. Sign in again before continuing.");
+    const token = await billingAuthToken(() => getToken({ skipCache: true }));
+    if (clerk.user?.id !== expectedUserId) throw new Error("Your account changed. Sign in again before continuing.");
+    return billingRequest<unknown>("billing-customer", body, token);
+  });
   const identity = useMemo<CustomerIdentity>(() => ({
+    sensitiveMutation: reverifiedMutation,
     loaded: isLoaded,
     userId: userId || null,
     email: user?.primaryEmailAddress?.emailAddress || null,
@@ -117,7 +125,7 @@ function ClerkBillingPortal() {
       window.history.replaceState(null, "", url.pathname + url.search + url.hash);
       return clerk.signOut();
     },
-  }), [clerk, getToken, isLoaded, user?.primaryEmailAddress?.emailAddress, userId]);
+  }), [reverifiedMutation, clerk, getToken, isLoaded, user?.primaryEmailAddress?.emailAddress, userId]);
   return <BillingPortalContent key={userId || "signed-out"} identity={identity} authTitle={authMode === "sign-up" ? "Create your Morrow account." : "Sign in to Morrow."} authContent={<div className={styles.embeddedAuth}>
     {authMode === "sign-up" ? <SignUp routing="hash" forceRedirectUrl={returnUrl} signInForceRedirectUrl={returnUrl} signInUrl={`${returnUrl}#sign-in`} /> : <SignIn routing="hash" forceRedirectUrl={returnUrl} signUpForceRedirectUrl={returnUrl} signUpUrl={`${returnUrl}#sign-up`} />}
   </div>} accountControl={userId ?
@@ -377,8 +385,21 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
 
   const run = async (name: string, task: () => Promise<void>) => {
     setBusy(name); setError(""); setNotice("");
-    try { await task(); } catch (caught) { setError(errorText(caught)); }
+    try { await task(); } catch (caught) {
+      if ((caught as { code?: string })?.code === "reverification_cancelled") setNotice("Verification cancelled. Nothing changed.");
+      else setError(errorText(caught));
+    }
     finally { setBusy(""); }
+  };
+
+  const sensitiveMutation = async (body: object) => {
+    const userId = activeUserId.current;
+    const mutate = identityRef.current?.sensitiveMutation;
+    if (!userId || !mutate) throw new Error("Sign in again to confirm it's you.");
+    const result = await mutate(body, userId);
+    if (userId !== activeUserId.current) throw new Error("Your account changed. Sign in again before continuing.");
+    if (isReverificationHint(result)) throw new Error("Verification wasn't completed. Try again.");
+    return result;
   };
 
   const signIn = () => void run("sign-in", async () => {
@@ -557,6 +578,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       await approveDesktopRequest(desktopDetails, seat.id, codeConfirmed, async body => {
         const token = await authToken();
         if (!userId || userId !== activeUserId.current) throw new Error("Your account changed. Start sign-in again.");
+        if ((body as { action?: string }).action === "revoke_device") return sensitiveMutation(body);
         return billingRequest("billing-customer", body, token);
       }, replace, () => Boolean(userId && userId === activeUserId.current));
       if (userId !== activeUserId.current) return;
@@ -658,7 +680,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     const userId = activeUserId.current;
     const token = await authToken();
     if (!userId || userId !== activeUserId.current) throw new Error("Sign in again to manage your Macs.");
-    return billingRequest("billing-customer", body, token);
+    return sensitiveMutation(body);
   };
   const revokeMac = (device: ConnectedMac) => void run(`revoke-${device.installationId}`, async () => {
     await revokeConnectedMac(device.installationId, deviceMutation); await loadDevices();
@@ -673,14 +695,14 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     event.preventDefault();
     void run("assign", async () => {
       if (!signedIn || !selectedAccount) throw new Error("Select a company account.");
-      await billingRequest("billing-customer", { action: "assign_seat", accountId: selectedAccount.id, email: seatEmail }, await authToken());
+      await sensitiveMutation({ action: "assign_seat", accountId: selectedAccount.id, email: seatEmail });
       setSeatEmail(""); await refresh(); setNotice("Seat assigned. Ask this person to sign in with that email.");
     });
   };
 
   const removeSeat = (seat: BillingSeat) => void run(`remove-${seat.id}`, async () => {
     if (!signedIn) throw new Error("Sign in first.");
-    await billingRequest("billing-customer", { action: "remove_seat", seatId: seat.id }, await authToken());
+    await sensitiveMutation({ action: "remove_seat", seatId: seat.id });
     await refresh(); setNotice("Seat removed and its access revoked.");
   });
 
@@ -689,8 +711,8 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       if (!signedIn) throw new Error("Sign in first.");
       if (action === "cancel") setCancelRetryId(null);
       try {
-        await billingRequest("billing-customer", { action, subscriptionId: subscription.id,
-          ...(nextQuantity ? { quantity: nextQuantity } : {}) }, await authToken());
+        await sensitiveMutation({ action, subscriptionId: subscription.id,
+          ...(nextQuantity ? { quantity: nextQuantity } : {}) });
       } catch (caught) {
         if (action === "cancel" && caught instanceof BillingError && caught.code === "CANCELLATION_VERIFICATION_FAILED") {
           setCancelRetryId(subscription.id);

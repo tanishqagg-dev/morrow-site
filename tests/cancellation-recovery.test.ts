@@ -11,10 +11,11 @@ function cancellationFlow() {
     refresh: vi.fn(), setCancelRetryId: vi.fn(), setConfirmCancel: vi.fn(), setNotice: vi.fn(),
     run: (_action: string, work: () => Promise<void>) => { pending = work(); },
   };
+  const sensitiveMutation = (body: object) => bindings.billingRequest("billing-customer", body, "qa-token");
   const start = source.indexOf('const changeSubscription =');
   const end = source.indexOf('const loadInvoices =', start);
   const code = ts.transpileModule(source.slice(start, end) + '\nreturn changeSubscription;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const change = new Function(...Object.keys(bindings), code)(...Object.values(bindings));
+  const change = new Function(...Object.keys(bindings), "sensitiveMutation", code)(...Object.values(bindings), sensitiveMutation);
   return { ...bindings, cancel: (status: string) => { change('cancel', { id: 'sub-a', status }); return pending!; } };
 }
 const failure = () => new BillingError('Provider cancellation unconfirmed.', 'CANCELLATION_VERIFICATION_FAILED');
