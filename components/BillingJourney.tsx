@@ -1,3 +1,5 @@
+import { SiteHeader } from "./SiteHeader";
+import { SiteFooter } from "./SiteFooter";
 import type { ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle, SpinnerGap } from "@phosphor-icons/react";
 import type { SubscriptionStage } from "../lib/subscription-flow";
@@ -19,11 +21,8 @@ export function BillingJourney(props: Props) {
   const { stage, email, busy, desktopRequest, desktopConnected } = props;
   const activeStep = stage === "sign-in" || stage === "loading" || stage === "unavailable" ? 0 : stage === "invite" || stage === "plan" ? 1 : stage === "confirming" || stage === "payment-recovery" ? 2 : 3;
   return <div className={styles.site}>
-    <header className={styles.header}>
-      <a href="/" aria-label="Morrow home"><img src="/morrow/wordmark.png" alt="morrow" width="118" height="39" /></a>
-      {email && <div className={styles.identity}><span>{email}</span>{props.accountControl || <button onClick={props.onSignOut} disabled={busy}>Sign out</button>}</div>}
-    </header>
-    <main id="main-content" className={styles.main}>
+    <SiteHeader activePage="subscribe" accountControl={email ? <div className={styles.identity}><span>{email}</span>{props.accountControl || <button onClick={props.onSignOut} disabled={busy}>Sign out</button>}</div> : null} />
+    <main id="main-content" className={styles.main} data-stage={stage}>
       {stage !== "account" && <ol className={styles.steps} aria-label="Subscription progress">
         {["Sign in", "Plan", "Payment", "Ready"].map((label, index) => <li key={label} aria-current={index === activeStep ? "step" : undefined} data-complete={index < activeStep}>
           <span aria-hidden="true">{index < activeStep ? <Check /> : index + 1}</span>{label}
@@ -74,6 +73,6 @@ export function BillingJourney(props: Props) {
       </section>}
       {props.children}
     </main>
-    <footer className={styles.footer}><span>Morrow</span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href={help}>Help</a></footer>
+    <SiteFooter compact />
   </div>;
 }

@@ -45,11 +45,11 @@ export function BillingPortal() {
   return publishableKey ? <ClerkProvider publishableKey={publishableKey} afterSignOutUrl="/subscribe"
      appearance={{
     variables: {
-      colorPrimary: "#ffe34b", colorPrimaryForeground: "#111111",
-      colorBackground: "#fffdf8", colorForeground: "#111111",
+      colorPrimary: "#F5D33F", colorPrimaryForeground: "#111111",
+      colorBackground: "#FFFFFF", colorForeground: "#111111",
       colorInput: "#ffffff", colorInputForeground: "#111111",
-      colorMutedForeground: "#575757", colorBorder: "#dedede",
-      borderRadius: "14px", fontFamily: "Satoshi, -apple-system, BlinkMacSystemFont, Arial, sans-serif",
+      colorMutedForeground: "#575757", colorBorder: "#EBEBEB",
+      borderRadius: "12px", fontFamily: "Satoshi, -apple-system, BlinkMacSystemFont, Arial, sans-serif",
     },
     elements: {
       header: { display: "none" },
@@ -62,11 +62,11 @@ export function BillingPortal() {
       main: { gap: "24px" },
       socialButtons: { width: "100%", display: "grid", gridTemplateColumns: "1fr", gap: "12px" },
       socialButtonsProviderIcon: { width: "18px", height: "18px" },
-      formFieldInput: { boxShadow: "none", border: "1px solid #dedede", borderRadius: "10px", minHeight: "48px" },
+      formFieldInput: { boxShadow: "none", border: "1px solid #D4D4D4", borderRadius: "12px", minHeight: "48px" },
       formFieldCheckboxInput__legalAccepted: { margin: 0, flexShrink: 0, borderRadius: "4px" },
       formFieldCheckboxLabel: { margin: 0, lineHeight: "20px" },
-      socialButtonsBlockButton: { width: "100%", color: "#111111", border: "1px solid #dedede", borderRadius: "10px", minHeight: "48px", boxShadow: "none", background: "#ffffff" },
-      formButtonPrimary: { boxShadow: "none", minHeight: "48px" },
+      socialButtonsBlockButton: { width: "100%", color: "#111111", border: "1px solid #D4D4D4", borderRadius: "12px", minHeight: "48px", boxShadow: "none", background: "#ffffff" },
+      formButtonPrimary: { boxShadow: "none", minHeight: "50px", borderRadius: "999px" },
       socialButtonsBlockButtonText: { color: "#111111" },
       footerActionLink: { color: "#111111", fontWeight: 700 },
     },
@@ -446,7 +446,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       key: result.keyId, subscription_id: result.subscriptionId, name: "Morrow",
       ...(result.paymentMethod ? {config: {display: {blocks: {selected: {name: result.paymentMethod === "upi" ? (trialEligible ? "Set up UPI AutoPay" : `Pay ${rupees(totalCharge)} with UPI`) : "Pay with credit or debit card", instruments: [{method: result.paymentMethod}]}}, sequence: ["block.selected"], preferences: {show_default_blocks: false}}}} : {}),
       description: `${audience === "company" ? `${seats} business seats` : "Personal"} · ${period}`,
-      prefill: { email: result.email }, theme: { color: "#ffe34b" },
+      prefill: { email: result.email }, theme: { color: "#F5D33F" },
       handler: (response: unknown) => {
         if (outcome === "confirming") return;
         outcome = "confirming";
@@ -479,7 +479,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         : "Payment failed. Retry in Razorpay or close checkout and try again.");
     });
     checkout.open();
-    opened = true; setCheckoutOpen(true);
+    opened = true; setCheckoutOpen(outcome === "open");
     }).finally(() => { if (!opened) checkoutLock.current = false; });
   };
 
@@ -641,7 +641,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         <p className={styles.termNote}>Your invite gives you access to subscribe; it does not waive payment. Review your current plan on the next screen.</p>
         <button className={styles.primary} type="submit" disabled={Boolean(busy) || !inviteCode.trim()}>{busy === "invite" ? "Checking invite…" : <>Continue to plan <ArrowRight /></>}</button>
       </form>
-      <p className={styles.supportNote}>No invitation yet? <a href="/#beta">Request beta access</a>.</p>
+      <p className={styles.supportNote}>No invitation yet? <a href="/contact">Request beta access</a>.</p>
     </section>}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
       <h1 id="plan-title">{trialEligible ? `Start your ${snapshot?.trial?.days || trialConfig.days}-day free trial.` : "Subscribe to Morrow."}</h1>
@@ -655,19 +655,39 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         {trialEligible ? <>
           <ol className={styles.trialTimeline} aria-label="Your trial timeline" aria-live="polite">
             <li><div><span className={styles.timelineDate}>Today</span><strong className={styles.timelineAmount}>₹0</strong><p>Set up AutoPay to start your trial.</p></div></li>
-            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge</strong><p>{rupees(quote)} + GST, then monthly.</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
+            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{activePlan || prepared ? `${rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge` : "Price unavailable"}</strong><p>{activePlan ? `${rupees(quote)} + GST, then monthly.` : "No published plan is available right now."}</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
           </ol>
           <p className={styles.authorizationNote}>Your bank may show a ₹5 check. It is refunded automatically. <a href="https://razorpay.com/docs/payments/subscriptions/faqs/" target="_blank" rel="noopener noreferrer">How authorization works ↗</a></p>
         </> : <>
-          <p className={styles.price}>{appliedCoupon?.duration === "fixed" ? "No charge" : (activePlan ? rupees(monthlyEquivalent) : "Price unavailable")}{appliedCoupon?.duration !== "fixed" && <span>/ month including GST</span>}</p>
+          <p className={styles.price}>{appliedCoupon?.duration === "fixed" ? "No charge" : (activePlan ? rupees(appliedCoupon?.duration === "first_cycle" ? totalCharge : monthlyEquivalent) : "Price unavailable")}{appliedCoupon?.duration !== "fixed" && <span>{appliedCoupon?.duration === "first_cycle" ? "first payment including GST" : "/ month including GST"}</span>}</p>
           <p className={styles.termNote}>{appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : appliedCoupon?.duration === "first_cycle" ? `${firstPaymentTerms} Cancel renewal anytime.` : period === "yearly" ? `${rupees(totalCharge)} billed yearly, including GST.` : "Billed monthly. Cancel renewal anytime."}</p>
         </>}
-        <ul className={styles.benefits}>
+        {!trialEligible && <ul className={styles.benefits}>
           <li><CheckCircle aria-hidden="true" />Voice and text on your Mac</li>
           <li><CheckCircle aria-hidden="true" />Work with files and connected apps</li>
           <li><CheckCircle aria-hidden="true" />{trialEligible ? "Your ChatGPT subscription is separate" : "Manage your subscription from your account"}</li>
-        </ul>
+        </ul>}
         {audience === "company" && <label className={styles.field}>Seats<input type="number" min={2} max={100} value={seats} disabled={Boolean(busy) || checkoutOpen} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>}
+            {!trialEligible && <dl className={styles.total}>
+          <div><dt>Plan</dt><dd>{activePlan || appliedCoupon ? rupees(quote) : "Unavailable"}</dd></div>
+          {appliedCoupon?.duration !== "fixed" && <div><dt>GST (18%{gstBenefit ? " after discount" : ""})</dt><dd>{activePlan || appliedCoupon ? rupees(gst) : "Unavailable"}</dd></div>}
+          <div className={styles.totalFinal}><dt>Due today</dt><dd>{trialEligible ? "₹0" : activePlan || appliedCoupon ? rupees(totalCharge) : "Loading…"}</dd></div>
+        </dl>}
+
+        {paymentMode === "test" && <p className={styles.notice}>Test checkout. No real money is collected.</p>}
+        {!activePlan && appliedCoupon?.duration !== "fixed" && <p className={styles.notice} role="status">{catalogState === "loading" ? "Loading plans…" : "This plan is not available for checkout yet. Choose another billing period or try again later."}</p>}
+        {appliedCoupon?.duration === "first_cycle" && <label className={styles.field}>
+          Payment method
+          <select aria-label="Payment method" value={couponPaymentMethod} disabled={Boolean(busy) || checkoutOpen} onChange={event => setCouponPaymentMethod(event.target.value as "upi" | "card")}>
+            {(appliedCoupon.paymentMethods || ["upi"]).map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
+          </select>
+        </label>}
+        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || (!activePlan && appliedCoupon?.duration !== "fixed")}>
+          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
+        </button>
+        <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
+        <p className={styles.finePrint}>By continuing, you agree to the <a href="/terms">Terms</a>.</p>
+        <div className={styles.planOptions}>
         <details className={`${styles.coupon} ${styles.planOption}`} open={couponCode ? true : undefined}>
           <summary>Have a coupon?</summary>
           <form onSubmit={applyCoupon}>
@@ -688,27 +708,9 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           <p>{activePlan?.gstDiscountAvailable ? `With valid GSTIN details, Morrow funds a discount equal to the standard GST charge. Your total is ${rupees(activePlan.amountPaise)} per ${renewalPeriod}, including applicable GST. Coupons cannot be combined with this discount.` : "GST is included in the checkout total."} Your details go to our billing team for the GST invoice. A GSTIN does not guarantee input tax credit.</p>
         </div>}
       </details>
-            {!trialEligible && <dl className={styles.total}>
-          <div><dt>Plan</dt><dd>{activePlan || appliedCoupon ? rupees(quote) : "Unavailable"}</dd></div>
-          {appliedCoupon?.duration !== "fixed" && <div><dt>GST (18%{gstBenefit ? " after discount" : ""})</dt><dd>{activePlan || appliedCoupon ? rupees(gst) : "Unavailable"}</dd></div>}
-          <div className={styles.totalFinal}><dt>Due today</dt><dd>{trialEligible ? "₹0" : activePlan || appliedCoupon ? rupees(totalCharge) : "Loading…"}</dd></div>
-        </dl>}
-
-        {paymentMode === "test" && <p className={styles.notice}>Test checkout. No real money is collected.</p>}
-        {!activePlan && appliedCoupon?.duration !== "fixed" && <p className={styles.notice} role="status">{catalogState === "loading" ? "Loading plans…" : "This plan is not available for checkout yet. Choose another billing period or try again later."}</p>}
-        {appliedCoupon?.duration === "first_cycle" && <label className={styles.field}>
-          Payment method
-          <select aria-label="Payment method" value={couponPaymentMethod} disabled={Boolean(busy) || checkoutOpen} onChange={event => setCouponPaymentMethod(event.target.value as "upi" | "card")}>
-            {(appliedCoupon.paymentMethods || ["upi"]).map(method => <option key={method} value={method}>{method === "upi" ? "UPI" : "Credit or debit card"}</option>)}
-          </select>
-        </label>}
-        <button className={styles.primary} onClick={startCheckout} disabled={Boolean(busy) || checkoutOpen || !matchingAccount || (!activePlan && appliedCoupon?.duration !== "fixed")}>
-          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
-        </button>
-        <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
-        <p className={styles.finePrint}>By continuing, you agree to the <a href="/terms">Terms</a>.</p>
+        </div>
       </div>
-      {!trialEligible && <p className={styles.supportNote}>Your ChatGPT subscription is separate.</p>}
+      <p className={styles.supportNote}>Your ChatGPT subscription is separate.</p>
       {snapshot?.betaInviteRequired && <button className={styles.textButton} onClick={() => { setInviteAccepted(false); setError(""); }} disabled={Boolean(busy) || checkoutOpen}>Use a different invite code</button>}
       {bulkEmail && <p className={styles.supportNote}>Buying for a team? <a href={`mailto:${bulkEmail}?subject=Morrow%20bulk%20package`}>Contact us</a></p>}
     </section>}
@@ -739,11 +741,14 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         <label className={styles.field}>Seats for next billing period<input type="number" min={2} max={100} value={seats} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>
         {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || seats === currentSubscription.quantity}>Update seats</button>}
       </details>}
-      <details className={styles.management}><summary>Payments and invoices</summary>
+      <p className={styles.paymentMethod}><strong>Payment method</strong>Morrow does not store your card or UPI details. Razorpay manages your AutoPay authorization.</p>
+      <details className={styles.management} open><summary>Payments and invoices</summary>
         <button disabled={Boolean(busy)} onClick={loadInvoices}>{busy === "invoices" ? "Loading invoices…" : "Load invoices"}</button>
-        {invoices.map(invoice => <div key={invoice.id} className={styles.paymentRow}><span>{invoice.number}</span><strong>{rupees(invoice.amountPaise)}</strong><span>{invoice.status}</span>{invoice.url && <a href={invoice.url} target="_blank" rel="noopener noreferrer">View invoice</a>}</div>)}
+        {invoices.length > 0 && <div className={styles.tableScroll}><table className={styles.invoiceTable}><caption className={styles.srOnly}>Morrow invoices</caption><thead><tr><th scope="col">Invoice</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Receipt</th></tr></thead><tbody>
+          {invoices.map(invoice => <tr key={invoice.id}><td>{invoice.number}<small>{invoice.paidAt ? day(invoice.paidAt) : "Not paid"}</small></td><td>{rupees(invoice.amountPaise)}</td><td>{invoice.status}</td><td>{invoice.url ? <a href={invoice.url} target="_blank" rel="noopener noreferrer">View invoice</a> : "Unavailable"}</td></tr>)}
+        </tbody></table></div>}
         {(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).length === 0 ? <p>No payments yet.</p> :
-          (snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).map((payment) => <div key={payment.id} className={styles.paymentRow}><span>{day(payment.paid_at)}<br /><small>Payment ID: {payment.razorpay_payment_id}</small></span><strong>{rupees(payment.amount_paise)}</strong><span>{payment.status}</span></div>)}
+          <div className={styles.tableScroll}><table className={styles.invoiceTable}><caption className={styles.srOnly}>Morrow payment history</caption><thead><tr><th scope="col">Date</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{(snapshot?.payments || []).filter((payment) => subscriptions.some((sub) => sub.id === payment.subscription_id)).map((payment) => <tr key={payment.id}><td>{day(payment.paid_at)}<small>Payment ID: {payment.razorpay_payment_id}</small></td><td>{rupees(payment.amount_paise)}</td><td>{payment.status}</td></tr>)}</tbody></table></div>}
       </details>
       <p className={styles.supportNote}>Need a refund? <a href={`mailto:${siteConfig.supportEmail}?subject=Morrow%20refund%20request`}>Contact support</a> within 7 days of your first payment. <a href="/refunds">See the policy</a>.</p>
       <button className={styles.textButton} onClick={refreshAccess} disabled={Boolean(busy)}>{busy === "refresh" ? "Checking…" : "Refresh subscription"}</button>

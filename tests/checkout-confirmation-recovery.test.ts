@@ -26,7 +26,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now) {
     prepared, preparedCheckout: { preparedAt }, trialAuthorizationExpired, parseCheckoutReply, BillingError,
     crypto: { randomUUID: vi.fn(() => `request-${Math.random()}`) }, authToken: async () => 'token',
     billingRequest: vi.fn(async (_endpoint, payload) => payload.action === 'checkout' ? reply() : {}),
-    loadRazorpayCheckout: async () => {}, setPreparedCheckout: vi.fn(), setNotice: vi.fn(), setCheckoutOpen: vi.fn(), setError: vi.fn(),
+    rememberPendingPayment: vi.fn(), loadRazorpayCheckout: async () => {}, setPreparedCheckout: vi.fn(), setNotice: vi.fn(), setCheckoutOpen: vi.fn(), setError: vi.fn(),
     setTrialDeclined: vi.fn(), window: { Razorpay: class { open = open; on() {} } },
     run: (_name: string, work: () => Promise<void>) => { pending = work(); return pending.catch(() => {}); },
   };
@@ -49,6 +49,18 @@ function confirmationFlow(status = 'expired', startedAt = now) {
   return bindings;
 }
 describe('trial authorization deadline', () => {
+  it('keeps checkout unlocked when the provider confirms during open', async () => {
+    const flow = checkoutFlow();
+    flow.window.Razorpay = class {
+      constructor(private options: { handler: (response: unknown) => void }) {}
+      open() { this.options.handler({ razorpay_subscription_id: 'sub-new' }); }
+      on() {}
+    } as unknown as typeof flow.window.Razorpay;
+    await flow.start();
+    expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true, 'sub-new');
+    expect(flow.setCheckoutOpen).toHaveBeenLastCalledWith(false);
+  });
+
   it('uses the server deadline rather than the seven-day first-charge date', () => {
     const checkout = { ...reply(), trialAuthorizationExpiresAt: new Date(now + 1000).toISOString() };
     expect(trialAuthorizationExpired(checkout, now - 31 * 60_000, now)).toBe(false);
