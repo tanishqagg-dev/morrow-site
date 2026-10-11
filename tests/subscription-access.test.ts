@@ -27,7 +27,7 @@ describe("subscription access without activation keys", () => {
     const {connect,approveDesktop,bindings} = flow();
     await connect(fixture(), "account-a", "user-a");
     expect(approveDesktop).not.toHaveBeenCalled();
-    expect(bindings.setNotice).toHaveBeenCalledWith(expect.stringContaining("Check the pairing code"));
+    expect(bindings.setNotice).toHaveBeenCalledWith(expect.stringContaining("Enter the code shown in Morrow"));
   });
   it("does not unlock for a checkout callback without confirmed paid access", async () => {
     const {connect,approveDesktop} = flow();

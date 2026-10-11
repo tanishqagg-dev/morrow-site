@@ -20,6 +20,7 @@ if(process.argv.includes('--check')) {
  let existing=false;
  try {await fetch('http://127.0.0.1:4395/subscribe');existing=true;}catch{}
  if(existing)throw new Error('Port 4395 is already in use. Stop that server before running the isolated fixture.');
+ await run(process.execPath,['scripts/clear-next-output.mjs']);
  const server=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--hostname','127.0.0.1','--port','4395'],{cwd,env,stdio:'inherit',detached:true});
  try {
   let ready=false;
@@ -29,6 +30,6 @@ if(process.argv.includes('--check')) {
    await new Promise(resolve=>setTimeout(resolve,500));
   }
   if(!ready)throw new Error('Local Next fixture did not become ready');
-  await run(process.execPath,['scripts/qa-round5-site.mjs']);
+  await run(process.execPath,[process.argv.includes('--pairing')?'scripts/qa-round5-pairing.mjs':'scripts/qa-round5-site.mjs']);
  } finally {try{process.kill(-server.pid,'SIGTERM');}catch{}}
 }

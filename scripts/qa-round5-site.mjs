@@ -34,7 +34,7 @@ try {
     let payload;
     if(url.pathname.endsWith('/billing-catalog'))payload={mode:'test',plans:[plan],trial:{enabled:false,days:7},betaInviteRequired:false};
     else if(body.action==='snapshot')payload=snapshot;
-    else if(body.action==='desktop_request')payload={request:{id,status:requestStatus,deviceName:'Tanishq’s MacBook Air',deviceModel:'MacBook Air',appVersion:'0.3.12',requestedAt:recent,expiresAt:state==='expired'?recent:future,...(['pending','approved'].includes(requestStatus)?{userCode:'K7M4QX'}:{}),seatInUse:null}};
+    else if(body.action==='desktop_request')payload={request:{id,status:requestStatus,deviceName:'Tanishq’s MacBook Air',deviceModel:'MacBook Air',appVersion:'0.3.12',requestedAt:recent,expiresAt:state==='expired'?recent:future,seatInUse:null}};
     else if(body.action==='devices')payload={devices:[{installationId:id,deviceName:'Tanishq’s MacBook Air',deviceModel:'MacBook Air',appVersion:'0.3.12',activatedAt:recent,lastSeenAt:recent,seatId:seat.id,accountName:'Personal account'}]};
     else if(body.action==='approve_desktop'){assert.equal(body.userCode,'K7M4QX');requestStatus='approved';payload={approved:true};}
     else if(body.action==='save_invoice_profile'){assert.equal(body.invoiceProfile.kind,'consumer');payload={saved:true};}
@@ -65,7 +65,7 @@ try {
   if(state==='consent') {
    assert.equal(calls.filter(action=>action==='approve_desktop').length,0);
    assert.equal(await page.getByRole('button',{name:'Connect this Mac',exact:true}).isEnabled(),false);
-   const codeSize=await page.getByLabel('Pairing code K7M 4QX').evaluate(el=>parseFloat(getComputedStyle(el).fontSize));assert.ok(codeSize>=40);
+   assert.equal(await page.getByRole('textbox',{name:/Code character/}).count(),6);
   }
   if(accountView)await page.getByRole('button',{name:'Revoke Tanishq’s MacBook Air',exact:true}).waitFor();
   if(['pending','halted','paused'].includes(state)) {

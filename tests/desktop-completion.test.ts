@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DesktopRequest } from "../lib/desktop-consent";
-const request = (status: DesktopRequest['status'], ttl = 10000): DesktopRequest => ({ id: "request", status, deviceName: "Mac", deviceModel: null, appVersion: "1", requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + ttl).toISOString(), userCode: "K7M4QX", seatInUse: null });
+const request = (status: DesktopRequest['status'], ttl = 10000): DesktopRequest => ({ id: "request", status, deviceName: "Mac", deviceModel: null, appVersion: "1", requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + ttl).toISOString(), seatInUse: null });
 afterEach(() => vi.useRealTimers());
 describe("AUTH-09 desktop completion", () => {
   it("waits for server connected, polls every 2 seconds and stops on completion", async () => {
