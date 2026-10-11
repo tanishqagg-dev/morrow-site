@@ -22,3 +22,6 @@
 
 .desktopConsent .primary { background: #111; color: #fff; }
 .desktopConsent .primary:not(:disabled):hover { background: #333; }
+
+.recoveryGuidance { display: flex; flex-direction: column; gap: 12px; }
+.recoveryGuidance a { text-decoration: underline; text-underline-offset: 4px; align-self: flex-start; }
