@@ -19,6 +19,7 @@ import { BillingDocuments } from "./BillingDocuments";
 import { printGstDocument, type GstDocument, type GatewayReceipt, type BillingDocumentsReply } from "@/lib/billing-documents";
 import { DesktopConsent } from "./DesktopConsent";
 import { approveDesktopRequest, type DesktopRequest } from "@/lib/desktop-consent";
+import { quantityChangeEligibility } from "@/lib/subscription-quantity";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -788,6 +789,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const changeSubscription = (action: "cancel" | "change_quantity", subscription: BillingSubscription, nextQuantity?: number) =>
     void run(action, async () => {
       if (!signedIn) throw new Error("Sign in first.");
+      if (action === "change_quantity" && quantityChangeEligibility(subscription) !== "allowed") throw new Error("Refresh your subscription to check whether seat changes are available.");
       if (action === "cancel") setCancelRetryId(null);
       try {
         await sensitiveMutation({ action, subscriptionId: subscription.id,
@@ -964,8 +966,11 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       {selectedAccount?.kind === "company" && <details className={styles.management}><summary>Manage team seats</summary>
         <form onSubmit={assignSeat}><label className={styles.field}>Email<input type="email" value={seatEmail} onChange={(event) => setSeatEmail(event.target.value)} placeholder="name@company.com" required /></label><button disabled={Boolean(busy) || !hasPaidAccess}>Assign seat</button></form>
         {accountSeats.map((seat) => <div className={styles.paymentRow} key={seat.id}><span>{seat.email}</span><button onClick={() => removeSeat(seat)} disabled={Boolean(busy)}>Remove</button></div>)}
-        <label className={styles.field}>Seats for next billing period<input type="number" min={2} max={100} value={seats} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>
-        {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || seats === currentSubscription.quantity}>Update seats</button>}
+        {currentSubscription && quantityChangeEligibility(currentSubscription) === "allowed" && <><label className={styles.field}>Seats for next billing period<input type="number" min={2} max={100} value={seats} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>
+        {currentSubscription && <button onClick={() => changeSubscription("change_quantity", currentSubscription, seats)} disabled={Boolean(busy) || !hasPaidAccess || seats === currentSubscription.quantity}>Update seats</button>}</>}
+        {currentSubscription && quantityChangeEligibility(currentSubscription) === "unknown" && <p>Your payment method has not been confirmed. <button onClick={refreshAccess} disabled={Boolean(busy)}>Refresh subscription</button></p>}
+        {currentSubscription && quantityChangeEligibility(currentSubscription) === "unsupported" && <p>UPI, eNACH and netbanking subscriptions cannot change their seat count. Contact support if your team needs a different plan.</p>}
+        {currentSubscription && quantityChangeEligibility(currentSubscription) === "state" && <p>Seat changes are available when a card subscription is authenticated or active.</p>}
       </details>}
       <section className={styles.management} aria-labelledby="connected-macs-title">
         <h2 id="connected-macs-title">Connected Macs</h2>

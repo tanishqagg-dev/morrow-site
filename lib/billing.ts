@@ -64,6 +64,10 @@ export type BillingSubscription = {
   id: string; account_id: string; plan_id: string; razorpay_subscription_id: string | null;
   access_source?: "payment" | "admin_coupon" | "trial";
   trial_ends_at?: string | null;
+  payment_method?: string | null;
+  payment_method_source?: "captured_payment" | "provider_fetch";
+  payment_method_payment_id?: string | null;
+  payment_method_verified_at?: string | null;
   status: BillingSubscriptionStatus; quantity: number; scheduled_quantity: number | null;
   paid_until: string | null; cancel_at_period_end: boolean;
   plan: { name: string; period: string; amount_paise: number; charge_amount_paise?: number };
