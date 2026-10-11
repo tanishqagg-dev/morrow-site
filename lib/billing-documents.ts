@@ -12,7 +12,7 @@ export type GstDocument = {
   listPricePaise?: number; discountPaise?: number; taxableValuePaise?: number; cgstPaise?: number; sgstPaise?: number; igstPaise?: number;
   refundId?: string; refundReason?: string; originalInvoiceNumber?: string; originalInvoiceDate?: string;
 };
-export type GatewayReceipt = {id: string; number?: string | null; status: string; amountPaise: number; paidAt?: string | null; url: string | null};
+export type GatewayReceipt = {id: string; paymentId?: string | null; number?: string | null; status: string; amountPaise: number; paidAt?: string | null; url: string | null};
 export type BillingDocumentsReply = {invoices: GstDocument[]; receipts: GatewayReceipt[]; receiptsStatus: "available" | "unavailable"};
 
 export async function printGstDocument(document: GstDocument, loadHtml: () => Promise<string>, isCurrent = () => true) {
@@ -45,4 +45,14 @@ export async function printGstDocument(document: GstDocument, loadHtml: () => Pr
     if (url) URL.revokeObjectURL(url);
     popup.close(); throw error;
   }
+}
+
+export function groupPaymentDocuments(invoices:GstDocument[],receipts:GatewayReceipt[]) {
+  const ids=new Set(invoices.filter(document=>document.kind==='tax_invoice' && document.paymentId).map(document=>document.paymentId));
+  const matched=new Set(receipts.filter(receipt=>receipt.paymentId && ids.has(receipt.paymentId)).map(receipt=>receipt.paymentId!));
+  return {groups:[...matched].map(paymentId=>({paymentId,
+    invoices:invoices.filter(document=>document.kind==='tax_invoice' && document.paymentId===paymentId),
+    receipts:receipts.filter(receipt=>receipt.paymentId===paymentId)})),
+    invoices:invoices.filter(document=>document.kind!=='tax_invoice' || !matched.has(document.paymentId)),
+    receipts:receipts.filter(receipt=>!receipt.paymentId || !matched.has(receipt.paymentId))};
 }
