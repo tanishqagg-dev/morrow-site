@@ -10,6 +10,7 @@ import { BillingJourney } from "./BillingJourney";
 import { currentSubscriptionForAccount, subscriptionStage, paymentPollDelay, trialAuthorizationExpired, pendingPaymentOutcome } from "@/lib/subscription-flow";
 import { siteConfig } from "@/lib/site-config";
 import { billingAuthToken } from "@/lib/billing-auth";
+import { pollDesktopCompletion } from "@/lib/desktop-completion";
 import { revokeConnectedMac, signOutEverywhere, type ConnectedMac } from "@/lib/connected-macs";
 import { clearDesktopRequest, resolveDesktopRequest, type StoredDesktopRequest } from "@/lib/desktop-storage";
 import { DesktopConsent } from "./DesktopConsent";
@@ -569,6 +570,28 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     });
     return () => { cancelled = true; };
   }, [signedIn, desktopRequest, authToken]);
+
+  const desktopStatus = desktopDetails?.status;
+  const desktopExpiresAt = desktopDetails?.expiresAt;
+  useEffect(() => {
+    if (!desktopDetails || desktopStatus !== "approved") return;
+    const userId = activeUserId.current;
+    return pollDesktopCompletion(desktopDetails, async () => {
+      const token = await authToken();
+      if (!userId || userId !== activeUserId.current) throw new Error("Your account changed. Start sign-in again.");
+      const result = await billingRequest<{ request: DesktopRequest }>("billing-customer", { action: "desktop_request", requestId: desktopRequest }, token);
+      return result.request;
+    }, request => {
+      if (userId !== activeUserId.current) return;
+      setDesktopDetails(request); setDesktopConnected(request.status === "connected"); setError("");
+      if (request.status === "connected" || request.status === "expired") {
+        storedDesktopRequest.current = null;
+        try { clearDesktopRequest(sessionStorage); } catch { /* Optional storage. */ }
+        const url = new URL(window.location.href); url.searchParams.delete("desktop");
+        window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+      }
+    }, () => { if (userId === activeUserId.current) setError("We couldn't check your Mac. We'll keep checking until this request expires."); });
+  }, [desktopStatus, desktopExpiresAt, desktopRequest, identity?.userId, authToken]);
 
   const approveDesktop = async (seat: BillingSeat, replace = false) => {
     if (!desktopDetails || connectionLock.current) return;
