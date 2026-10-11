@@ -4,13 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
+import {assertCheckoutPrice} from '../lib/checkout-quote';
 import {checkoutMethods,checkoutMethodConfig} from '../lib/checkout-method';
 import { invoiceProfileForCheckout, invoiceRecipientNameForCheckout } from '../lib/invoice-profile';
 import { BillingError, parseCheckoutReply, parsePendingPayment, type BillingSnapshot } from '../lib/billing';
 import { trialAuthorizationExpired, pendingPaymentOutcome, PAYMENT_CONFIRMATION_TIMEOUT_MS, subscriptionStage } from '../lib/subscription-flow';
 const source = readFileSync(new URL('../components/BillingPortal.tsx', import.meta.url), 'utf8');
 const now = Date.now();
-const reply = () => parseCheckoutReply({ subscriptionId: 'sub-new', keyId: 'key', paymentMethod:'upi', email: 'me@example.com', name: 'Me', trialEndsAt: new Date(now + 7 * 86400_000).toISOString() });
+const reply = () => parseCheckoutReply({ subscriptionId: 'sub-new', keyId: 'key', amountPaise:11800, paymentMethod:'upi', email: 'me@example.com', name: 'Me', trialEndsAt: new Date(now + 7 * 86400_000).toISOString() });
 function execute(start: string, end: string, suffix: string, bindings: Record<string, unknown>) {
   const begin = source.indexOf(start);
   const code = ts.transpileModule(source.slice(begin, source.indexOf(end, begin)) + suffix, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -25,7 +26,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
     invoiceRecipientName: "QA Buyer", invoiceRecipientNameForCheckout, businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
     inviteAccepted: true, activePlan: { id: 'plan' }, audience: 'personal', seats: 1, period: 'monthly',
-    checkoutMethodConfig, availablePaymentMethods:checkoutMethods(null), couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
+    assertCheckoutPrice, serverQuote:{amountPaise:11800,quantity:1}, billedSeats:1, checkoutMethodConfig, availablePaymentMethods:checkoutMethods(null), couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
     prepared, preparedCheckout: { preparedAt, requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, trialAuthorizationExpired, PAYMENT_CONFIRMATION_TIMEOUT_MS, parseCheckoutReply, BillingError,
     crypto: { randomUUID: vi.fn(() => `request-${Math.random()}`) }, authToken: async () => 'token',
     billingRequest: vi.fn(async (_endpoint, payload) => payload.action === 'checkout' ? reply() : {}),
@@ -236,4 +237,15 @@ it('RZP-10 sends the selected method on ordinary checkout and restricts the prov
  await flow.start();
  expect(flow.billingRequest.mock.calls.find(([,body])=>body.action==='checkout')?.[1]).toMatchObject({paymentMethod:'card'});
  expect(options?.config.display.blocks.selected.instruments).toEqual([{method:'card'}]);
+});
+it('RZP-14 never lets Resume bypass a changed final checkout price',async()=>{
+ const changed={...reply(),amountPaise:11900};
+ const flow=checkoutFlow(changed,now,{trialEligible:false});
+ await expect(flow.start()).rejects.toThrow('price changed');
+ expect(flow.open).not.toHaveBeenCalled();
+ expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true,'sub-new',expect.objectContaining({checkout:expect.objectContaining({priceConfirmed:false})}));
+ const blocked=parsePendingPayment({desktopRequest:'',userId:'user',requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',subscriptionId:'sub-new',checkout:{reply:changed,preparedAt:now,priceConfirmed:false}});
+ expect(blocked?.checkout?.priceConfirmed).toBe(false);
+ const retry=checkoutFlow(changed,now,{trialEligible:false,pendingReceipt:{current:blocked}});
+ await expect(retry.start(true)).rejects.toThrow(/cancel/i);expect(retry.open).not.toHaveBeenCalled();
 });

@@ -3,7 +3,7 @@
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClerkProvider, SignUp, SignIn, UserButton, useAuth, useClerk, useUser, useReverification } from "@clerk/react";
 import { ArrowRight, CheckCircle, CreditCard, SpinnerGap, ArrowClockwise } from "@phosphor-icons/react";
-import { isReverificationHint, BillingError, parseCheckoutReply, billingQuote, firstPaymentQuote, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, clearPendingAuthorizations, rupees } from "@/lib/billing";
+import { isReverificationHint, BillingError, parseCheckoutReply, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, clearPendingAuthorizations, rupees } from "@/lib/billing";
 import type { BillingTrial, CheckoutReply, BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription } from "@/lib/billing";
 import styles from "./SubscriptionFlow.module.css";
 import { SubscriptionRecoveryGuidance } from "./SubscriptionRecoveryGuidance";
@@ -23,6 +23,7 @@ import { quantityChangeEligibility } from "@/lib/subscription-quantity";
 import { CheckoutRecovery } from "./CheckoutRecovery";
 import { abandonCheckout, type CheckoutRecoveryState } from "@/lib/checkout-recovery";
 import { checkoutMethods, checkoutMethodConfig } from "@/lib/checkout-method";
+import { loadCheckoutQuote, assertCheckoutPrice, type CheckoutQuote } from "@/lib/checkout-quote";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -183,6 +184,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [receiptsStatus, setReceiptsStatus] = useState<"available" | "unavailable" | null>(null);
   const selectedAccountRef = useRef("");
   const refreshSequence = useRef(0);
+  const [checkoutQuote, setCheckoutQuote] = useState<{context:string;quote:CheckoutQuote}|null>(null);
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteRevision, setQuoteRevision] = useState(0);
+  const quoteQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [couponCode, setCouponCode] = useState("");
   const [couponPaymentMethod, setCouponPaymentMethod] = useState<"upi" | "card">("upi");
   const [coupon, setCoupon] = useState<{ code: string; unitAmountPaise: number; duration?: string; accessDays?: number; chargeAmountPaise?: number; renewalAmountPaise?: number; paymentMethods?: Array<"upi" | "card">; context: string } | null>(null);
@@ -227,7 +232,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [cancelRetryId, setCancelRetryId] = useState<string | null>(null);
   const connectionLock = useRef(false);
   const pendingKey = `morrow:payment-pending:${identity?.userId}:${selectedAccountId}`;
-  const rememberPendingPayment = (pending: boolean, subscriptionId?: string, authorization?: {requestId: string; userId: string; expiresAt: number; checkout?: {reply: CheckoutReply; preparedAt: number}}) => {
+  const rememberPendingPayment = (pending: boolean, subscriptionId?: string, authorization?: {requestId: string; userId: string; expiresAt: number; checkout?: {reply: CheckoutReply; preparedAt: number; priceConfirmed?: boolean}}) => {
     const receipt = pending ? pendingReceipt.current?.subscriptionId === subscriptionId ? pendingReceipt.current : { desktopRequest, subscriptionId, startedAt: Date.now(), ...authorization } : null;
     pendingReceipt.current = receipt;
     setPaymentPending(pending);
@@ -370,27 +375,18 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const couponContext = `${identity?.userId}:${selectedAccountId}:${activePlan?.id}:${seats}:${audience}:${period}`;
   const appliedCoupon = coupon?.context === couponContext ? coupon : null;
   const availablePaymentMethods = checkoutMethods(appliedCoupon);
-  const gstBenefit = Boolean(businessInvoice && activePlan?.gstDiscountAvailable && !appliedCoupon);
-  const gstBenefitTotal = activePlan?.amountPaise ?? 0;
-  const gstBenefitBase = gstBenefitTotal - Math.round(gstBenefitTotal * 18 / 118);
-  const unitPrice = gstBenefit ? gstBenefitBase : appliedCoupon?.unitAmountPaise ?? activePlan?.amountPaise ?? 0;
-  const recurringQuote = billingQuote(unitPrice,
-    audience === "company" ? seats : 1,
-    gstBenefit ? gstBenefitTotal : appliedCoupon ? appliedCoupon.chargeAmountPaise : activePlan ? activePlan.chargeAmountPaise : undefined);
-  // Introductory quotes already contain the aggregate first payment for all seats.
-  const firstTotal = appliedCoupon?.duration === "first_cycle" ? appliedCoupon.chargeAmountPaise : undefined;
-  const { base: quote, gst, total: totalCharge } = firstTotal === undefined ? recurringQuote : firstPaymentQuote(firstTotal);
+  const quoteContext = `${couponContext}:${appliedCoupon?.code || ""}:${businessInvoice}:${JSON.stringify(invoiceDetails)}`;
+  const serverQuote = checkoutQuote?.context === quoteContext && pendingReceipt.current?.checkout?.priceConfirmed !== false ? checkoutQuote.quote : null;
+  const quote = serverQuote?.baseAmountPaise ?? 0;
+  const gst = serverQuote?.gstAmountPaise ?? 0;
+  const totalCharge = serverQuote?.amountPaise ?? 0;
   const renewalPeriod = period === "yearly" ? "year" : "month";
-  const firstPaymentTerms = appliedCoupon?.duration === "first_cycle" ? `First payment only. Then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod} including GST.` : "";
+  const firstPaymentTerms = serverQuote ? `First payment only. Then ${rupees(serverQuote.renewalAmountPaise)} per ${renewalPeriod} including GST.` : "Your first and renewal charges will appear after the quote is confirmed.";
   const trialEligible = Boolean(trialConfig.enabled && snapshot?.trial?.enabled && snapshot.trial.eligible && !trialDeclined && audience === "personal" && period === "monthly" && !appliedCoupon && !businessInvoice);
-  const checkoutContext = `${couponContext}:${inviteCode}:${businessInvoice}:${JSON.stringify(invoiceDetails)}:${invoiceRecipientName}:${trialEligible}:${couponPaymentMethod}`;
+  const checkoutContext = `${couponContext}:${appliedCoupon?.code || ""}:${inviteCode}:${businessInvoice}:${JSON.stringify(invoiceDetails)}:${invoiceRecipientName}:${trialEligible}:${couponPaymentMethod}`;
   const prepared = preparedCheckout?.context === checkoutContext ? preparedCheckout.reply : null;
   const trialEndsAt = prepared?.trialEndsAt || (snapshot?.subscriptions || []).find(sub => sub.account_id === selectedAccountId && sub.status === "created")?.trial_ends_at || null;
   const billedSeats = audience === "company" ? seats : 1;
-  const monthlyPrice = plans.find((plan) => plan.audience === audience && plan.period === "monthly")?.amountPaise ?? 0;
-  const yearlyPrice = plans.find((plan) => plan.audience === audience && plan.period === "yearly")?.amountPaise ?? 0;
-  const yearlyDiscount = monthlyPrice > 0 ? Math.max(0, Math.round((1 - yearlyPrice / (monthlyPrice * 12)) * 100)) : 0;
-  const monthlyEquivalent = period === "yearly" ? totalCharge / 12 : totalCharge;
   const accounts = snapshot?.accounts || [];
   const selectedAccount: BillingAccount | undefined = accounts.find((account) => account.id === selectedAccountId);
   const invoicePrefilledAccount = useRef("");
@@ -407,6 +403,27 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const subscriptionNeedsRecovery = Boolean(currentSubscription && ["pending", "halted", "paused"].includes(currentSubscription.status));
   const matchingAccount = selectedAccount?.kind === audience;
   const hasPaidAccess = Boolean(currentSubscription?.paid_until && new Date(currentSubscription.paid_until).getTime() > clock);
+  useEffect(() => {
+    if (!signedIn || !matchingAccount || !activePlan || pendingReceipt.current || appliedCoupon?.duration === "fixed" || (couponCode.trim() && !appliedCoupon)) return;
+    let invoiceProfile;
+    try { invoiceProfile = invoiceProfileForCheckout(businessInvoice, invoiceDetails); }
+    catch { setQuoteError("Complete your billing details to see the exact checkout price."); return; }
+    let cancelled = false;
+    const userId = activeUserId.current, accountId = selectedAccountId;
+    const stillCurrent = () => !cancelled && userId === activeUserId.current && accountId === selectedAccountRef.current;
+    setCheckoutQuote(null); setQuoteError("");
+    const timer = setTimeout(() => {
+      quoteQueue.current = quoteQueue.current.catch(() => {}).then(async () => {
+        if (!stillCurrent()) return;
+        const token = await authToken();
+        if (!stillCurrent()) return;
+        const result = await loadCheckoutQuote(body => billingRequest("billing-customer", body, token),
+          {accountId,planId:activePlan.id,quantity:billedSeats,...(appliedCoupon ? {couponCode:appliedCoupon.code} : {})}, invoiceProfile, stillCurrent);
+        if (result && stillCurrent()) setCheckoutQuote({context:quoteContext,quote:result});
+      }).catch(caught => { if (stillCurrent()) setQuoteError(errorText(caught)); });
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [signedIn,matchingAccount,activePlan?.id,quoteContext,quoteRevision,hasPaidAccess,paymentPending,checkoutRecovery,authToken]);
   const accountSeats = (snapshot?.seats || []).filter((seat) => seat.account_id === selectedAccountId);
   const paidAccountIds = new Set((snapshot?.subscriptions || [])
     .filter((subscription) => subscription.paid_until && new Date(subscription.paid_until).getTime() > Date.now())
@@ -448,7 +465,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       }, await authToken());
       setCoupon({ ...result, context: couponContext });
       if (result.duration === "first_cycle" && result.paymentMethods?.[0]) setCouponPaymentMethod(result.paymentMethods[0]);
-      setNotice(result.duration === "fixed" ? `Admin coupon applied: ${result.accessDays} days of access. It will not renew.` : result.duration === "first_cycle" ? `First payment ${rupees(result.chargeAmountPaise!)} including GST. Then ${rupees(result.renewalAmountPaise!)} per ${renewalPeriod} including GST until cancelled.` : "Coupon applied. This price continues for the life of this subscription.");
+      setNotice(result.duration === "fixed" ? `Admin coupon applied: ${result.accessDays} days of access. It will not renew.` : "Coupon applied. Review the confirmed first and renewal charges below.");
     });
   };
 
@@ -471,6 +488,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     if (!signedIn || !selectedAccount) throw new Error("Your account is still loading. Please try again.");
     const checkoutUser = activeUserId.current;
     const recovery = resume ? pendingReceipt.current : null;
+    if (recovery?.checkout?.priceConfirmed === false) throw new Error("Cancel this checkout and refresh your quote before paying.");
     if (resume && (!recovery?.checkout || recovery.userId !== checkoutUser || trialAuthorizationExpired(recovery.checkout.reply, recovery.checkout.preparedAt))) throw new Error("This checkout can no longer be resumed. Change plan to cancel it before starting again.");
     if (!resume) {
     const invoiceProfile = invoiceProfileForCheckout(businessInvoice, invoiceDetails);
@@ -503,6 +521,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     }
     if (snapshot?.betaInviteRequired && !inviteAccepted) throw new Error("Enter your beta invite code first.");
     if (!activePlan) throw new Error("Choose a published plan first.");
+    if (!serverQuote || serverQuote.quantity !== billedSeats) throw new Error("Wait for the confirmed checkout price before paying.");
     if (selectedAccount.kind !== audience) throw new Error("Select a matching personal or company account.");
     if (couponCode.trim() && !appliedCoupon) throw new Error("Apply your coupon or remove it before continuing.");
     if (!availablePaymentMethods.includes(couponPaymentMethod)) throw new Error("This offer has no reviewed terms for the selected payment method. Choose an available method before checkout.");
@@ -562,8 +581,9 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     rememberPendingPayment(true, result.subscriptionId, {
       requestId: checkoutRequestId, userId: checkoutUser!,
       expiresAt: Date.now() + PAYMENT_CONFIRMATION_TIMEOUT_MS,
-      checkout: recovery?.checkout || {reply: result, preparedAt: preparedCheckout?.context === checkoutContext ? preparedCheckout.preparedAt : Date.now()},
+      checkout: recovery?.checkout || {reply: result, priceConfirmed: Boolean(serverQuote && (result.amountPaise ?? result.chargeAmountPaise) === serverQuote.amountPaise), preparedAt: preparedCheckout?.context === checkoutContext ? preparedCheckout.preparedAt : Date.now()},
     });
+    if (!resume && serverQuote) assertCheckoutPrice(result, serverQuote);
     const checkout = new window.Razorpay({
       key: result.keyId, subscription_id: result.subscriptionId, name: "Morrow",
       config: checkoutMethodConfig(result.paymentMethod, resume ? recovery?.checkout?.reply.paymentMethod : couponPaymentMethod),
@@ -906,26 +926,26 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     </section>}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
       {checkoutRecovery && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
-        canResume={Boolean(pendingReceipt.current?.checkout && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId && item.status === "created") && !trialAuthorizationExpired(pendingReceipt.current.checkout.reply, pendingReceipt.current.checkout.preparedAt, clock))}
+        canResume={Boolean(pendingReceipt.current?.checkout && pendingReceipt.current.checkout.priceConfirmed !== false && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId && item.status === "created") && !trialAuthorizationExpired(pendingReceipt.current.checkout.reply, pendingReceipt.current.checkout.preparedAt, clock))}
         onResume={() => startCheckout(true)} onChangePlan={changeCheckoutPlan} onRefresh={refreshAccess} />}
       <h1 id="plan-title">{trialEligible ? `Start your ${snapshot?.trial?.days || trialConfig.days}-day free trial.` : "Subscribe to Morrow."}</h1>
       <p className={styles.subtitle}>{trialEligible ? "Authorize your bank, then Morrow unlocks on your Mac." : "Your voice workspace on your Mac."}</p>
       <fieldset disabled={Boolean(pendingReceipt.current)} className={styles.planFieldset}>
       {monthlyAvailable && yearlyAvailable && <div className={styles.termSwitch} role="group" aria-label="Billing period">
         <button aria-pressed={period === "monthly"} onClick={() => choosePeriod("monthly")} disabled={Boolean(busy) || checkoutOpen}>Monthly</button>
-        <button aria-pressed={period === "yearly"} onClick={() => choosePeriod("yearly")} disabled={Boolean(busy) || checkoutOpen}>Yearly {yearlyDiscount > 0 && <span>Save {yearlyDiscount}%</span>}</button>
+        <button aria-pressed={period === "yearly"} onClick={() => choosePeriod("yearly")} disabled={Boolean(busy) || checkoutOpen}>Yearly</button>
       </div>}
       <div className={styles.plan} aria-label="Your plan">
         <div className={styles.planHeading}><h2>Morrow {audience === "company" ? "Business" : "Personal"}</h2><span>For {audience === "company" ? "your team" : "you"}</span></div>
         {trialEligible ? <>
           <ol className={styles.trialTimeline} aria-label="Your trial timeline" aria-live="polite">
             <li><div><span className={styles.timelineDate}>Today</span><strong className={styles.timelineAmount}>₹0</strong><p>Set up AutoPay to start your trial.</p></div></li>
-            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{activePlan || prepared ? `${rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge` : "Price unavailable"}</strong><p>{activePlan ? `${rupees(quote)} + GST, then monthly.` : "No published plan is available right now."}</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
+            <li><div><span className={styles.timelineDate}>{trialEndsAt ? day(trialEndsAt) : "When your trial ends"}</span><strong className={styles.timelineAmount}>{serverQuote || prepared ? `${rupees(prepared?.amountPaise ?? prepared?.chargeAmountPaise ?? totalCharge)} first charge` : "Price unavailable"}</strong><p>{serverQuote ? `${rupees(quote)} + ${rupees(gst)} GST, then ${rupees(serverQuote.renewalAmountPaise)} monthly.` : "No published plan is available right now."}</p><p className={styles.timelineCancel}>{trialEndsAt ? `Cancel before ${day(trialEndsAt)} to avoid this charge.` : "Review your trial to see the exact charge date."}</p></div></li>
           </ol>
           <p className={styles.authorizationNote}>Your bank may show a ₹5 check. It is refunded automatically. <a href="https://razorpay.com/docs/payments/subscriptions/faqs/" target="_blank" rel="noopener noreferrer">How authorization works ↗</a></p>
         </> : <>
-          <p className={styles.price}>{appliedCoupon?.duration === "fixed" ? "No charge" : (activePlan ? rupees(appliedCoupon?.duration === "first_cycle" ? totalCharge : monthlyEquivalent) : "Price unavailable")}{appliedCoupon?.duration !== "fixed" && <span>{appliedCoupon?.duration === "first_cycle" ? "first payment including GST" : "/ month including GST"}</span>}</p>
-          <p className={styles.termNote}>{appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : appliedCoupon?.duration === "first_cycle" ? `${firstPaymentTerms} Cancel renewal anytime.` : period === "yearly" ? `${rupees(totalCharge)} billed yearly, including GST.` : "Billed monthly. Cancel renewal anytime."}</p>
+          <p className={styles.price}>{appliedCoupon?.duration === "fixed" ? "No charge" : (serverQuote ? rupees(prepared?.amountPaise ?? totalCharge) : "Price unavailable")}{appliedCoupon?.duration !== "fixed" && <span>{appliedCoupon?.duration === "first_cycle" ? "first payment including GST" : `/ ${renewalPeriod} including GST`}</span>}</p>
+          <p className={styles.termNote}>{appliedCoupon?.duration === "fixed" ? `${appliedCoupon.accessDays} days of access. Does not renew.` : appliedCoupon?.duration === "first_cycle" ? `${firstPaymentTerms} Cancel renewal anytime.` : serverQuote ? `${rupees(serverQuote.renewalAmountPaise)} on renewal each ${renewalPeriod}, including GST. Cancel renewal anytime.` : "Choose your state to see the exact checkout price."}</p>
         </>}
         {!trialEligible && <ul className={styles.benefits}>
           <li><CheckCircle aria-hidden="true" />Voice and text on your Mac</li>
@@ -934,11 +954,12 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         </ul>}
         {audience === "company" && <label className={styles.field}>Seats<input type="number" min={2} max={100} value={seats} disabled={Boolean(busy) || checkoutOpen} onChange={(event) => setSeats(Math.max(2, Math.min(100, Number(event.target.value) || 2)))} /></label>}
             {!trialEligible && <dl className={styles.total}>
-          <div><dt>Plan</dt><dd>{activePlan || appliedCoupon ? rupees(quote) : "Unavailable"}</dd></div>
-          {appliedCoupon?.duration !== "fixed" && <div><dt>GST (18%{gstBenefit ? " after discount" : ""})</dt><dd>{activePlan || appliedCoupon ? rupees(gst) : "Unavailable"}</dd></div>}
-          <div className={styles.totalFinal}><dt>Due today</dt><dd>{trialEligible ? "₹0" : activePlan || appliedCoupon ? rupees(totalCharge) : "Loading…"}</dd></div>
+          <div><dt>Plan</dt><dd>{appliedCoupon?.duration === "fixed" ? "₹0" : serverQuote ? rupees(quote) : "Unavailable"}</dd></div>
+          {appliedCoupon?.duration !== "fixed" && <div><dt>GST</dt><dd>{serverQuote ? rupees(gst) : "Unavailable"}</dd></div>}
+          <div className={styles.totalFinal}><dt>Due today</dt><dd>{trialEligible ? "₹0" : appliedCoupon?.duration === "fixed" ? "₹0" : serverQuote ? rupees(prepared?.amountPaise ?? totalCharge) : "Unavailable"}</dd></div>
         </dl>}
 
+        {appliedCoupon?.duration !== "fixed" && !serverQuote && <p role="status" className={styles.notice}>{pendingReceipt.current?.checkout?.priceConfirmed === false ? "The checkout price changed. Cancel this checkout and refresh your quote before paying." : quoteError || "Confirming your checkout price…"} {quoteError && <button onClick={() => setQuoteRevision(value => value + 1)} disabled={Boolean(busy)}>Refresh quote</button>}</p>}
         {paymentMode === "test" && <p className={styles.notice}>Test checkout. No real money is collected.</p>}
         {!activePlan && appliedCoupon?.duration !== "fixed" && <p className={styles.notice} role="status">{catalogState === "loading" ? "Loading plans…" : "This plan is not available for checkout yet. Choose another billing period or try again later."}</p>}
         {appliedCoupon?.duration !== "fixed" && <label className={styles.field}>
@@ -960,10 +981,10 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           </select>
         </label>
         <p className={styles.finePrint}>We need your state for the GST invoice.</p>
-        <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || (appliedCoupon?.duration !== "fixed" && !availablePaymentMethods.includes(couponPaymentMethod)) || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
-          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up UPI AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
+        <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || (appliedCoupon?.duration !== "fixed" && (!serverQuote || !availablePaymentMethods.includes(couponPaymentMethod))) || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
+          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
-        <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? `${rupees(totalCharge)} first payment, then ${rupees(appliedCoupon.renewalAmountPaise!)} per ${renewalPeriod}.` : `${rupees(totalCharge)} including GST ${period === "yearly" ? "per year" : "per month"}. Cancel renewal anytime.`}</p>
+        <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? serverQuote ? `${rupees(prepared?.amountPaise ?? totalCharge)} first payment, then ${rupees(serverQuote.renewalAmountPaise)} per ${renewalPeriod}.` : "Wait for your confirmed quote before paying." : serverQuote ? `${rupees(prepared?.amountPaise ?? totalCharge)} including GST per ${renewalPeriod}. Cancel renewal anytime.` : "Wait for your confirmed quote before paying."}</p>
         <p className={styles.finePrint}>By continuing, you agree to the <a href="/terms">Terms</a>.</p>
         <div className={styles.planOptions}>
         <details className={`${styles.coupon} ${styles.planOption}`} open={couponCode ? true : undefined}>
@@ -983,7 +1004,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
           <label>GSTIN<input value={invoiceDetails.gstin} maxLength={15} autoCapitalize="characters" onChange={e=>{const gstin=e.target.value.toUpperCase();setInvoiceDetails({...invoiceDetails,gstin});}}/></label>
           <label>Registered billing address<textarea value={invoiceDetails.address} maxLength={500} onChange={e=>setInvoiceDetails({...invoiceDetails,address:e.target.value})}/></label>
           <label>PIN code<input value={invoiceDetails.postalCode} inputMode="numeric" maxLength={6} onChange={e=>setInvoiceDetails({...invoiceDetails,postalCode:e.target.value})}/></label>
-          <p>{activePlan?.gstDiscountAvailable ? `With valid GSTIN details, Morrow funds a discount equal to the standard GST charge. Your total is ${rupees(activePlan.amountPaise)} per ${renewalPeriod}, including applicable GST. Coupons cannot be combined with this discount.` : "GST is included in the checkout total."} These details are used for your GST invoice. A GSTIN does not guarantee input tax credit.</p>
+          <p>Your confirmed quote includes any available business discount and applicable GST. These details are used for your GST invoice. A GSTIN does not guarantee input tax credit.</p>
         </div>}
       </details>
         </div>
@@ -1003,7 +1024,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><div className={styles.planControls}><span className={styles.statusPill}>{currentSubscription?.status === "trialing" ? "Trial" : currentSubscription?.status === "trial_canceled" || currentSubscription?.cancel_at_period_end || currentSubscription?.status === "cancelled" ? "Canceled" : currentSubscription && ["halted", "pending", "paused"].includes(currentSubscription.status) ? currentSubscription.status === "pending" ? "Retrying payment" : currentSubscription.status === "halted" ? "Payments stopped" : "Paused" : hasPaidAccess ? "Active" : currentSubscription ? "Expired" : "Not subscribed"}</span><button className={styles.iconButton} aria-label="Refresh subscription" title="Refresh subscription" onClick={refreshAccess} disabled={Boolean(busy)}><ArrowClockwise className={busy === "refresh" ? styles.spin : undefined} size={18} /></button></div></div>
         {subscriptionNeedsRecovery && currentSubscription && <SubscriptionRecoveryGuidance status={currentSubscription.status} hasPaidAccess={hasPaidAccess} />}
         {hasPaidAccess && currentSubscription ? <>
-          <p>{currentSubscription.status === "trial_canceled" ? `Trial canceled. Access until ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. You won't be charged.` : currentSubscription.status === "trialing" ? `${Math.max(0, Math.ceil((Date.parse(currentSubscription.trial_ends_at || currentSubscription.paid_until!) - clock) / 86400000))} days left · first charge ${rupees((currentSubscription.plan.charge_amount_paise ?? billingQuote(currentSubscription.plan.amount_paise).total) * currentSubscription.quantity)} on ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : currentSubscription.access_source === "admin_coupon" ? "Complimentary access" : `${rupees((currentSubscription.plan.charge_amount_paise ?? billingQuote(currentSubscription.plan.amount_paise).total) * currentSubscription.quantity)} including GST, billed ${currentSubscription.plan.period}`}</p>
+          <p>{currentSubscription.status === "trial_canceled" ? `Trial canceled. Access until ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. You won't be charged.` : currentSubscription.status === "trialing" ? `${Math.max(0, Math.ceil((Date.parse(currentSubscription.trial_ends_at || currentSubscription.paid_until!) - clock) / 86400000))} days left · first charge on ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : currentSubscription.access_source === "admin_coupon" ? "Complimentary access" : `Billed ${currentSubscription.plan.period}. Your exact charges are shown on your payment receipts.`}</p>
           {currentSubscription.status !== "trialing" && <dl className={styles.total}><div><dt>{currentSubscription.status === "trial_canceled" || currentSubscription.cancel_at_period_end || currentSubscription.access_source === "admin_coupon" || subscriptionNeedsRecovery ? "Access until" : "Next charge"}</dt><dd>{day(currentSubscription.paid_until)}</dd></div></dl>}
           {currentSubscription.cancel_at_period_end && <p className={styles.notice}>{currentSubscription.access_source === "admin_coupon" ? "This access does not renew." : "Renewal is cancelled. You can keep using Morrow until this date."}</p>}
           {currentSubscription.razorpay_subscription_id && !currentSubscription.cancel_at_period_end && currentSubscription.status !== "trial_canceled" && <>
