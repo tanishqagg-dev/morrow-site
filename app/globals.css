@@ -758,7 +758,7 @@
 .operator-page .operator-bar{ border-bottom: 1px solid #212121; }
 .operator-page .operator-bar h1{ font-size: clamp(35px, 4vw, 58px); letter-spacing: -.055em; }
 .operator-page .operator-login, .operator-page .operator-loading, .operator-page .operator-config-error, .operator-page .issue-panel, .operator-page .license-list{ border-radius: 12px; box-shadow: none; }
-.operator-page .operator-login-copy{ background: #F5D33F; }
+.operator-page .operator-login-copy{ background: #F5F5F5; }
 .operator-page .issued-code{ background: #F5D33F; border-color: #212121; }
 .operator-page .operator-config-error{
   position: relative;
@@ -814,3 +814,5 @@
 @media(max-width:700px){.site-header .main-nav{display:none}}
 
 .account-header-control{display:flex;align-items:center;font-size:14px;color:#525252}.account-footer{display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:24px;padding:24px 20px;border-top:1px solid #EBEBEB;font-size:13px;color:#525252}.account-footer a{min-height:32px;display:flex;align-items:center}.account-footer a:hover{text-decoration:underline;text-underline-offset:4px}@media(max-width:700px){.account-footer{gap:16px;font-size:12px}}
+
+.operator-login form .button{background:#F5D33F;color:#0A0A0A}

@@ -27,7 +27,7 @@ export default function TermsPage() {
           </section>
           <section>
             <h2>It's a beta</h2>
-            <p>Morrow is unfinished software. Features can change or have bugs. Keep backups and review its work. A beta invitation lets you subscribe; it does not give you free access. If we end the paid beta, we stop future renewals and refund the unused part of your paid period.</p>
+            <p>Morrow is unfinished software. Features can change or have bugs. Keep backups and review its work. When an invitation is required, checkout asks for it. Any available trial is shown with your plan. If we end the paid beta, we stop future renewals and refund the unused part of your paid period.</p>
           </section>
           <section>
             <h2>Check the work</h2>
@@ -39,12 +39,12 @@ export default function TermsPage() {
           </section>
           <section>
             <h2>Price</h2>
-            <p>The current plan and applicable GST are shown before you authorize checkout. Existing subscriptions keep their agreed price. Checkout shows the full amount and billing period before you pay. Your separate ChatGPT subscription is not included. Razorpay processes payments and recurring mandates. Your Morrow subscription renews until cancelled; we tell you before a price change applies.</p>
+            <p>The current plan and applicable GST are shown before you authorize checkout. Existing subscriptions keep their agreed price. Checkout shows the full amount and billing period before you pay. Your separate ChatGPT subscription is not included. Razorpay processes payments and recurring mandates. If a trial is offered, checkout shows its duration and first-charge date. Cancel before that date to avoid the first charge. Your Morrow subscription renews until cancelled; we tell you before a price change applies.</p>
           </section>
           <section>
             <h2>Delivery and cancellation</h2>
-            <p>This is a digital service; there is no physical shipping. Access activates after our server confirms payment. Install Morrow on a supported Mac and sign in with the same account. If you started checkout in the Mac app, it continues automatically after confirmation. If access does not appear, contact support instead of paying twice.</p>
-            <p>Cancel from <a href="/subscribe">Manage subscription</a> before your next renewal. Cancellation stops future renewals and keeps access through your paid period. Deleting the app does not cancel a subscription. See our <a href="/refunds">refund and cancellation policy</a>.</p>
+            <p>This is a digital service; there is no physical shipping. Access activates after our server confirms payment or trial bank authorization. Install Morrow on a supported Mac and sign in with the same account. If you started checkout in the Mac app, it continues automatically after confirmation. If access does not appear, contact support instead of paying twice.</p>
+            <p>Cancel from <a href="/subscribe">Manage subscription</a> before your next renewal. Cancellation stops future renewals and keeps access through your paid period or the end of your trial. Deleting the app does not cancel a subscription. See our <a href="/refunds">refund and cancellation policy</a>.</p>
           </section>
           <section>
             <h2>Refunds</h2>
@@ -52,7 +52,7 @@ export default function TermsPage() {
           </section>
           <section>
             <h2>Fair use</h2>
-            <p>Don't use Morrow to break the law, harm other people, get into systems or accounts you don't have permission to use, or get around OpenAI's usage policies. Don't resell beta access or share your signed-in account. Invitations are issued by our team; the shared invitation code does not replace a personal account or payment.</p>
+            <p>Don't use Morrow to break the law, harm other people, get into systems or accounts you don't have permission to use, or get around OpenAI's usage policies. Don't resell beta access or share your signed-in account. If an invitation is required, its code does not replace your personal account or bank authorization.</p>
           </section>
           <section>
             <h2>Ending access</h2>
