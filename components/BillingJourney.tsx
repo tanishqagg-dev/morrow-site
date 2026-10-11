@@ -56,7 +56,7 @@ export function BillingJourney(props: Props) {
         <a className={styles.supportNote} href={`${help}?subject=Morrow%20payment%20confirmation`}>Contact support</a>
       </section>}
       {stage === "confirming" && <section className={styles.state} aria-live="polite">
-        <SpinnerGap className={styles.spin} size={32} /><h1>Confirming with your bank.</h1>
+        <SpinnerGap className={styles.spin} size={32} /><h1>Checking your payment…</h1>
         <p>We are checking your bank authorization. {desktopRequest ? "Once access is ready, check the pairing code to connect your Mac." : "Your subscription will appear here once access is ready."}</p>
         <p className={styles.finePrint}>Please don’t pay again. It’s safe to check back here.</p>
         <button className={styles.secondary} onClick={props.onRefresh} disabled={busy}>{busy ? "Checking…" : "Check payment status"}</button>

@@ -24,7 +24,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now) {
     businessInvoice: false, invoiceDetails: { stateCode: "07" }, invoiceProfileForCheckout, selectedAccountRef: { current: "account" }, appliedCoupon: null, snapshot: { betaInviteRequired: false },
     inviteAccepted: true, activePlan: { id: 'plan' }, audience: 'personal', seats: 1, period: 'monthly',
     couponCode: '', inviteCode: '', couponPaymentMethod: 'upi', trialEligible: true, desktopRequest: '', checkoutContext: 'context',
-    prepared, preparedCheckout: { preparedAt }, trialAuthorizationExpired, parseCheckoutReply, BillingError,
+    prepared, preparedCheckout: { preparedAt, requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }, trialAuthorizationExpired, PAYMENT_CONFIRMATION_TIMEOUT_MS, parseCheckoutReply, BillingError,
     crypto: { randomUUID: vi.fn(() => `request-${Math.random()}`) }, authToken: async () => 'token',
     billingRequest: vi.fn(async (_endpoint, payload) => payload.action === 'checkout' ? reply() : {}),
     rememberPendingPayment: vi.fn(), loadRazorpayCheckout: async () => {}, setPreparedCheckout: vi.fn(), setNotice: vi.fn(), setCheckoutOpen: vi.fn(), setError: vi.fn(),
@@ -60,6 +60,22 @@ describe('trial authorization deadline', () => {
     await flow.start();
     expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true, 'sub-new');
     expect(flow.setCheckoutOpen).toHaveBeenLastCalledWith(false);
+  });
+
+  it('saves authorization before open and reconciles dismissal without the success handler', async () => {
+    const flow = checkoutFlow();
+    flow.window.Razorpay = class {
+      constructor(private options: { modal: {ondismiss: () => void} }) {}
+      open() {
+        expect(flow.rememberPendingPayment).toHaveBeenCalledWith(true, 'sub-new', expect.objectContaining({userId: 'user', requestId: expect.any(String), expiresAt: expect.any(Number)}));
+        this.options.modal.ondismiss();
+      }
+      on() {}
+    } as unknown as typeof flow.window.Razorpay;
+    await flow.start();
+    expect(flow.setNotice).toHaveBeenCalledWith(expect.stringContaining('Checking your payment'));
+    expect(flow.rememberPendingPayment).not.toHaveBeenCalledWith(false);
+    expect(flow.billingRequest.mock.calls.some(([, body]) => body.action === 'confirm_checkout')).toBe(false);
   });
 
   it('uses the server deadline rather than the seven-day first-charge date', () => {
@@ -124,6 +140,14 @@ describe('bounded payment confirmation', () => {
     expect(JSON.parse(stored)).toMatchObject({ subscriptionId: 'sub-provider', startedAt: expect.any(Number) });
     remember(false);
     expect(bindings.sessionStorage.removeItem).toHaveBeenCalledWith('pending');
+    expect(bindings.pendingReceipt.current).toBeNull();
+    expect(bindings.setPaymentPending).toHaveBeenLastCalledWith(false);
+  });
+  it('blocks checkout when its authorization marker cannot be stored', () => {
+    const bindings = {setPaymentPending: vi.fn(), setPaymentDesktopRequest: vi.fn(), desktopRequest: '', pendingReceipt: {current: null}, pendingKey: 'pending',
+      sessionStorage: {setItem: () => {throw new Error('Storage unavailable');}, removeItem: vi.fn()}};
+    const remember = execute('  const rememberPendingPayment =', '  useEffect(() => {', '\nreturn rememberPendingPayment;', bindings);
+    expect(() => remember(true, 'sub-provider', {requestId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',userId:'user',expiresAt:now+600_000})).toThrow('save this payment');
     expect(bindings.pendingReceipt.current).toBeNull();
     expect(bindings.setPaymentPending).toHaveBeenLastCalledWith(false);
   });

@@ -41,10 +41,17 @@ export function trialAuthorizationExpired(reply: CheckoutReply, preparedAt: numb
 }
 
 export const PAYMENT_CONFIRMATION_TIMEOUT_MS = 10 * 60_000;
-export function pendingPaymentOutcome(snapshot: BillingSnapshot | null | undefined, accountId: string, receipt: PendingPayment, hasAccess: boolean, now = Date.now()): "ready" | "waiting" | "failed" {
-  if (hasAccess) return "ready";
+export function pendingPaymentOutcome(snapshot: BillingSnapshot | null | undefined, accountId: string, receipt: PendingPayment, hasAccess: boolean, now = Date.now()): "ready" | "waiting" | "failed" | "uncertain" {
+  if (hasAccess && !receipt.userId) return "ready";
   const subscription = snapshot?.subscriptions.find(item => item.account_id === accountId &&
     (item.razorpay_subscription_id === receipt.subscriptionId || item.id === receipt.subscriptionId));
+  if (receipt.userId) {
+    // Access from another subscription is not evidence about this checkout.
+    if (subscription && hasAccess && subscription.paid_until && Date.parse(subscription.paid_until) > now) return "ready";
+    if (subscription && ["cancelled", "expired", "trial_canceled", "completed"].includes(subscription.status)) return "failed";
+    if (!receipt.expiresAt || now >= receipt.expiresAt) return "uncertain";
+    return "waiting";
+  }
   if (subscription && ["cancelled", "trial_canceled", "expired", "halted", "pending", "completed", "paused"].includes(subscription.status)) return "failed";
   // Legacy receipts without a timestamp cannot safely hold a customer in confirmation.
   if (!receipt.startedAt || now - receipt.startedAt >= PAYMENT_CONFIRMATION_TIMEOUT_MS) return "failed";

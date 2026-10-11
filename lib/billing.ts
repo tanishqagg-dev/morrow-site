@@ -33,13 +33,24 @@ export function parseBillingCatalog(value: unknown): { plans: BillingPlan[]; mod
   return { ...result.data, trial: result.data.trial ?? trialOff };
 }
 
-export type PendingPayment = { desktopRequest: string; subscriptionId?: string; startedAt?: number };
+export type PendingPayment = { desktopRequest: string; subscriptionId?: string; startedAt?: number; requestId?: string; userId?: string; expiresAt?: number };
 export function parsePendingPayment(value: unknown): PendingPayment | null {
   const result = z.object({ desktopRequest: z.union([z.literal(""), z.uuidv4()]),
     subscriptionId: z.string().min(1).max(128).optional(),
+    requestId: z.uuidv4().optional(), userId: z.string().min(1).max(128).optional(),
+    expiresAt: z.number().finite().positive().optional(),
     startedAt: z.number().finite().nonnegative().max(Date.now()).optional(),
   }).safeParse(value);
   return result.success ? result.data : null;
+}
+
+export function clearPendingAuthorizations(storage: Pick<Storage, "length" | "key" | "removeItem">, userId: string) {
+  const keys: string[] = [];
+  for (let index = 0; index < storage.length; index++) {
+    const key = storage.key(index);
+    if (key?.startsWith(`morrow:payment-pending:${userId}:`)) keys.push(key);
+  }
+  keys.forEach(key => storage.removeItem(key));
 }
 
 export type BillingAccount = {
