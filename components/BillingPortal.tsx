@@ -25,6 +25,8 @@ import { abandonCheckout, type CheckoutRecoveryState } from "@/lib/checkout-reco
 import { checkoutMethods, checkoutMethodConfig } from "@/lib/checkout-method";
 import { loadCheckoutQuote, assertCheckoutPrice, type CheckoutQuote } from "@/lib/checkout-quote";
 import { seatQuantityForQuote } from "@/lib/seat-quote-limit";
+import { waitForCheckout, type CheckoutExpiryState } from "@/lib/checkout-expiring";
+import { CheckoutExpiring } from "./CheckoutExpiring";
 import { CheckoutUnavailable } from "./CheckoutUnavailable";
 
 
@@ -219,6 +221,8 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const [busy, setBusy] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const checkoutLock = useRef(false);
+  const [checkoutExpiry, setCheckoutExpiry] = useState<CheckoutExpiryState | null>(null);
+  const expiringRequest = useRef<{context:string;requestId:string}|null>(null);
   const [notice, setNotice] = useState("");
   const [manageAccount, setManageAccount] = useState(false);
   useEffect(() => {
@@ -252,6 +256,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
     }
   };
   useEffect(() => {
+    setCheckoutExpiry(null); expiringRequest.current = null;
     setConfirmCancel(false); setError(""); setNotice(""); setPaymentRecovery(false); setCheckoutRecovery(null); checkoutFailure.current = "";
     try {
       const saved = sessionStorage.getItem(pendingKey);
@@ -488,6 +493,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
   const startCheckout = (resume = false) => {
     if (checkoutLock.current || paymentPending || hasPaidAccess || (!resume && pendingReceipt.current)) return;
     checkoutLock.current = true;
+    setCheckoutExpiry(null);
     let opened = false;
     void run("checkout", async () => {
     if (!signedIn || !selectedAccount) throw new Error("Your account is still loading. Please try again.");
@@ -543,20 +549,39 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       if (!activePlan) throw new Error("Choose a published plan first.");
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const requestId = crypto.randomUUID(); checkoutRequestId = requestId;
-          result = parseCheckoutReply(await billingRequest<unknown>("billing-customer", {
+          const requestId = expiringRequest.current?.context === checkoutContext ? expiringRequest.current.requestId : crypto.randomUUID(); checkoutRequestId = requestId;
+          expiringRequest.current = {context:checkoutContext,requestId};
+          const body = {
             action: "checkout", accountId: selectedAccount.id, planId: activePlan.id,
             quantity: audience === "company" ? seats : 1, requestId, trial: trialEligible, desktopRequestId: desktopRequest || undefined, couponCode: appliedCoupon?.code, inviteCode,
             paymentMethod: couponPaymentMethod,
-          }, await authToken()));
+          };
+          const current = () => checkoutUser === activeUserId.current && selectedAccount.id === selectedAccountRef.current
+            && expiringRequest.current?.requestId === requestId && expiringRequest.current.context === checkoutContext;
+          const response = await waitForCheckout(async () => {
+            const token = await authToken();
+            if (!current()) return null;
+            return billingRequest<unknown>("billing-customer", body, token);
+          }, current, setCheckoutExpiry);
+          if (response === null) return;
+          setCheckoutExpiry(null); expiringRequest.current = null;
+          result = parseCheckoutReply(response);
           break;
         } catch (caught) {
+          if (checkoutUser !== activeUserId.current || selectedAccount.id !== selectedAccountRef.current) return;
+          setCheckoutExpiry(null);
+          if (caught instanceof BillingError && caught.code === "TRIAL_ALREADY_ACTIVE") {
+            setCheckoutExpiry(null); expiringRequest.current = null; setPreparedCheckout(null);
+            await refresh();
+            return;
+          }
           if (caught instanceof BillingError && caught.code === "BILLING_STATE_REQUIRED") {
             setPreparedCheckout(null); document.getElementById("billing-state")?.focus();
             throw new Error("Choose your state so we can prepare your GST invoice, then try checkout again.");
           }
           if (caught instanceof BillingError && caught.code === "TRIAL_CHECKOUT_EXPIRED") {
             setPreparedCheckout(null);
+            expiringRequest.current = null;
             if (attempt === 0) { setNotice("This checkout expired. Preparing a new checkout."); continue; }
             throw new Error("This checkout expired again. Try again in a minute.");
           }
@@ -931,12 +956,13 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
       <p className={styles.supportNote}>No invitation yet? <a href="/contact">Request beta access</a>.</p>
     </section>}
     {stage === "plan" && <section aria-labelledby="plan-title" id="plans">
+      {checkoutExpiry && <CheckoutExpiring state={checkoutExpiry} busy={Boolean(busy)} onRetry={() => startCheckout()} />}
       {checkoutRecovery && <CheckoutRecovery state={checkoutRecovery} reason={checkoutFailure.current} busy={Boolean(busy)}
         canResume={Boolean(pendingReceipt.current?.checkout && pendingReceipt.current.checkout.priceConfirmed !== false && snapshot?.subscriptions.some(item => item.account_id === selectedAccountId && item.razorpay_subscription_id === pendingReceipt.current?.subscriptionId && item.status === "created") && !trialAuthorizationExpired(pendingReceipt.current.checkout.reply, pendingReceipt.current.checkout.preparedAt, clock))}
         onResume={() => startCheckout(true)} onChangePlan={changeCheckoutPlan} onRefresh={refreshAccess} />}
       <h1 id="plan-title">{trialEligible ? `Start your ${snapshot?.trial?.days || trialConfig.days}-day free trial.` : "Subscribe to Morrow."}</h1>
       <p className={styles.subtitle}>{trialEligible ? "Authorize your bank, then Morrow unlocks on your Mac." : "Your voice workspace on your Mac."}</p>
-      <fieldset disabled={Boolean(pendingReceipt.current)} className={styles.planFieldset}>
+      <fieldset disabled={Boolean(pendingReceipt.current) || Boolean(checkoutExpiry)} className={styles.planFieldset}>
       {monthlyAvailable && yearlyAvailable && <div className={styles.termSwitch} role="group" aria-label="Billing period">
         <button aria-pressed={period === "monthly"} onClick={() => choosePeriod("monthly")} disabled={Boolean(busy) || checkoutOpen}>Monthly</button>
         <button aria-pressed={period === "yearly"} onClick={() => choosePeriod("yearly")} disabled={Boolean(busy) || checkoutOpen}>Yearly</button>
@@ -988,7 +1014,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         </label>
         <p className={styles.finePrint}>We need your state for the GST invoice.</p>
         <button className={styles.primary} onClick={() => startCheckout()} disabled={Boolean(busy) || checkoutOpen || (appliedCoupon?.duration !== "fixed" && (!serverQuote || !availablePaymentMethods.includes(couponPaymentMethod))) || !matchingAccount || !invoiceDetails.stateCode || (!businessInvoice && (invoiceRecipientName.trim().length < 2 || invoiceRecipientName.trim().length > 160)) || (!activePlan && appliedCoupon?.duration !== "fixed")}>
-          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> Opening checkout…</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
+          {busy === "checkout" ? <><SpinnerGap className={styles.spin} /> {checkoutExpiry === "waiting" ? "Checking last checkout…" : "Opening checkout…"}</> : checkoutOpen ? "Complete payment in Razorpay" : appliedCoupon?.duration === "fixed" ? "Redeem access" : <>{trialEligible ? (prepared?.trialEndsAt ? "Set up AutoPay" : "Review free trial") : "Subscribe"} <ArrowRight /></>}
         </button>
         <p className={styles.finePrint}>{!activePlan && !appliedCoupon ? "Pricing is unavailable. Refresh your account." : trialEligible ? "Your trial starts after bank confirmation." : appliedCoupon?.duration === "fixed" ? "No payment or automatic renewal." : appliedCoupon?.duration === "first_cycle" ? serverQuote ? `${rupees(prepared?.amountPaise ?? totalCharge)} first payment, then ${rupees(serverQuote.renewalAmountPaise)} per ${renewalPeriod}.` : "Wait for your confirmed quote before paying." : serverQuote ? `${rupees(prepared?.amountPaise ?? totalCharge)} including GST per ${renewalPeriod}. Cancel renewal anytime.` : "Wait for your confirmed quote before paying."}</p>
         <p className={styles.finePrint}>By continuing, you agree to the <a href="/terms">Terms</a>.</p>

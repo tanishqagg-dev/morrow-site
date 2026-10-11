@@ -119,7 +119,7 @@ export function isReverificationHint(value: unknown): boolean {
   return hint?.clerk_error?.type === "forbidden" && hint.clerk_error.reason === "reverification-error";
 }
 export class BillingError extends Error {
-  constructor(message: string, public code?: string) { super(message); }
+  constructor(message: string, public code?: string, public retryAfter?: number) { super(message); }
 }
 
 export function paidSeatForAccount(snapshot: BillingSnapshot, accountId: string, email: string | null, now = Date.now()) {
@@ -159,7 +159,7 @@ export async function billingRequest<T>(functionName: string, body?: object, tok
     const result = await response.json().catch(() => null);
     if (controller.signal.aborted) throw new Error("Request timed out.");
     if (response.status === 403 && isReverificationHint(result)) return result as T;
-    if (!response.ok) throw new BillingError(result?.error?.message || "Morrow billing could not complete this request.", result?.error?.code);
+    if (!response.ok) throw new BillingError(result?.error?.message || "Morrow billing could not complete this request.", result?.error?.code, result?.retryAfter);
     if (result === null || typeof result !== "object") throw new Error("Morrow billing returned an unreadable response. Refresh your subscription to check its status.");
     if (functionName === "billing-customer" && (body as { action?: string })?.action === "snapshot") return parseBillingSnapshot(result) as T;
     return result as T;

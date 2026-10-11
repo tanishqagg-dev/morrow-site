@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { BillingJourney } from '../components/BillingJourney';
+import {waitForCheckout} from '../lib/checkout-expiring';
 import {assertCheckoutPrice} from '../lib/checkout-quote';
 import {checkoutMethods,checkoutMethodConfig} from '../lib/checkout-method';
 import { invoiceProfileForCheckout, invoiceRecipientNameForCheckout } from '../lib/invoice-profile';
@@ -21,6 +22,7 @@ function checkoutFlow(prepared = reply(), preparedAt = now, overrides: Record<st
   let pending: Promise<void>;
   const open = vi.fn();
   const bindings = {
+    waitForCheckout, expiringRequest:{current:null}, setCheckoutExpiry:vi.fn(), refresh:vi.fn(async()=>snapshot('active')),
     pendingReceipt: {current:null}, pendingCheck: {current:vi.fn()}, checkoutFailure:{current:""}, setCheckoutRecovery:vi.fn(), setPaymentPending:vi.fn(),
     checkoutLock: { current: false }, paymentPending: false, hasPaidAccess: false, signedIn: true,
     selectedAccount: { id: 'account', kind: 'personal' }, activeUserId: { current: 'user' },
@@ -248,4 +250,18 @@ it('RZP-14 never lets Resume bypass a changed final checkout price',async()=>{
  expect(blocked?.checkout?.priceConfirmed).toBe(false);
  const retry=checkoutFlow(changed,now,{trialEligible:false,pendingReceipt:{current:blocked}});
  await expect(retry.start(true)).rejects.toThrow(/cancel/i);expect(retry.open).not.toHaveBeenCalled();
+});
+
+it('RACE-03b refreshes the snapshot instead of opening or cancelling an already authorized trial',async()=>{
+ const billingRequest=vi.fn(async(_endpoint,body)=>{if(body.action==='checkout')throw new BillingError('Active','TRIAL_ALREADY_ACTIVE');return {};});
+ const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest});await flow.start();expect(flow.refresh).toHaveBeenCalledOnce();expect(flow.open).not.toHaveBeenCalled();expect(billingRequest.mock.calls.some(([,body])=>body.action==='abandon_checkout')).toBe(false);
+});
+
+it('RACE-03b keeps the request identity through 90 seconds and a manual Retry',async()=>{
+ vi.useFakeTimers();
+ try {
+  const requests:object[]=[];const billingRequest=vi.fn(async(_endpoint,body)=>{if(body.action==='checkout'){requests.push(body);throw new BillingError('Expiring','CHECKOUT_EXPIRING',5);}return {};});
+  const flow=checkoutFlow(null as unknown as ReturnType<typeof reply>,now,{billingRequest});const first=flow.start();await vi.advanceTimersByTimeAsync(90000);await first;expect(flow.setCheckoutExpiry).toHaveBeenLastCalledWith('timeout');expect(flow.open).not.toHaveBeenCalled();
+  billingRequest.mockImplementation(async(_endpoint,body)=>{if(body.action==='checkout'){requests.push(body);return reply();}return {};});await flow.start();expect(requests).toHaveLength(19);expect(requests.every(body=>JSON.stringify(body)===JSON.stringify(requests[0]))).toBe(true);expect(flow.setPreparedCheckout.mock.lastCall?.[0]).toMatchObject({reply:{subscriptionId:'sub-new'}});expect(flow.open).not.toHaveBeenCalled();
+ } finally {vi.useRealTimers();}
 });
