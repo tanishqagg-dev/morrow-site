@@ -11,3 +11,9 @@ The actual Clerk SDK forms were inspected without submitting credentials. Its re
 The API contract is unchanged. Trial dates and amounts still come from checkout/catalog responses; authorization expiry uses trialAuthorizationExpiresAt with the existing 25-minute fallback. Pending confirmation remains tied to a subscription and bounded by its saved timestamp. Cancellation verification errors preserve active access. No reminder step was invented.
 
 During visual review, optional plan fields moved below the main action, the SDK's default button shadow was removed with an explicit override, the empty-catalog price stopped implying a zero first charge, and introductory coupons gained a first-payment label. A provider callback during open no longer re-locks checkout; its executable regression test uses the real startCheckout function.
+
+Final visual correction: shared headers have an explicit 80px inner height on desktop and 72px on mobile, with flex shrinking disabled. This keeps the logo and account control centered on long forms as well as short states.
+
+The production/ screenshots show the final static export at both widths: download and the real Clerk form. The production query `?qa=trial` still requires Clerk authentication; the development state fixture is stripped. Font, help-video and real-app-screen asset requests returned HTTP 200.
+
+Validation: npm test passed all 160 tests in 26 suites. npm run typecheck passed. npm run build exported all 15 pages, including the existing published-home preservation checks. mono_check passed app/ and components/ with zero errors and warnings. The consolidated responsive audit contains 254 viewport captures plus their full-page companions, with no horizontal overflow or uncaught page errors. Static export checks confirmed the font, help-video and real-app-screen assets resolve; development fixtures are absent from the production JavaScript. No deployment or push was performed.
