@@ -82,6 +82,7 @@ export function BillingPortal() {
     elements: {
       headerTitle: { color: "#111111" },
       headerSubtitle: { color: "#575757" },
+      identityPreviewText: { whiteSpace: "normal", overflowWrap: "anywhere", textOverflow: "clip" },
       formResendCodeLink: { color: "#111111", textDecoration: "underline" },
       alternativeMethodsBlockButton: { color: "#111111" },
       otpCodeFieldInput: { border: "1px solid #737373", borderRadius: "8px" },
