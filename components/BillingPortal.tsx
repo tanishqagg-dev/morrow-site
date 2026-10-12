@@ -2,6 +2,8 @@
 
 import { lazy, Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClerkProvider, SignUp, SignIn, UserButton, useAuth, useClerk, useUser, useReverification } from "@clerk/react";
+import { useSignIn } from "@clerk/react/legacy";
+import { deviceTrustRedirectHash } from "@/lib/clerk-device-trust";
 import { ArrowRight, CheckCircle, CreditCard, SpinnerGap, ArrowClockwise } from "@phosphor-icons/react";
 import { isReverificationHint, SignInAgainRequired, BillingError, parseCheckoutReply, billingRequest, loadRazorpayCheckout, paidSeatForAccount, parseBillingCatalog, parsePendingPayment, clearPendingAuthorizations, rupees } from "@/lib/billing";
 import type { BillingTrial, CheckoutReply, BillingAccount, BillingPlan, BillingSeat, BillingSnapshot, BillingSubscription, OpenCheckout } from "@/lib/billing";
@@ -78,9 +80,11 @@ export function BillingPortal() {
       borderRadius: "12px", fontFamily: "Satoshi, -apple-system, BlinkMacSystemFont, Arial, sans-serif",
     },
     elements: {
-      header: { display: "none" },
-      headerTitle: { display: "none" },
-      headerSubtitle: { display: "none" },
+      headerTitle: { color: "#111111" },
+      headerSubtitle: { color: "#575757" },
+      formResendCodeLink: { color: "#111111", textDecoration: "underline" },
+      alternativeMethodsBlockButton: { color: "#111111" },
+      otpCodeFieldInput: { border: "1px solid #737373", borderRadius: "8px" },
       footer: { background: "transparent", backgroundImage: "none" },
       rootBox: { width: "100%" },
       cardBox: { width: "100%", boxShadow: "none", overflow: "visible", borderRadius: 0 },
@@ -116,6 +120,18 @@ function ClerkBillingPortal() {
   const { isLoaded, userId, getToken } = useAuth();
   const { user } = useUser();
   const clerk = useClerk();
+  const {signIn} = useSignIn();
+  const signInStatus = signIn?.status ?? null;
+  useEffect(() => {
+    if(authMode !== "sign-in")return;
+    const recoverTrustRoute = () => {
+      const hash = deviceTrustRedirectHash(signInStatus, window.location.hash);
+      if(hash)window.location.hash = hash;
+    };
+    recoverTrustRoute();
+    window.addEventListener("hashchange", recoverTrustRoute);
+    return () => window.removeEventListener("hashchange", recoverTrustRoute);
+  }, [authMode, signInStatus]);
   const previousUserId = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!isLoaded) return;
@@ -1177,7 +1193,7 @@ export function BillingPortalContent({ identity, accountControl, authContent, au
         {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
       </select></label>}
       <div className={styles.accountSummary}>
-        <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><div className={styles.planControls}><span className={styles.statusPill}>{subscriptionStatusLabel(currentSubscription, hasPaidAccess)}</span><button className={styles.iconButton} aria-label="Refresh subscription" title="Refresh subscription" onClick={refreshAccess} disabled={Boolean(busy)}><ArrowClockwise className={busy === "refresh" ? styles.spin : undefined} size={18} /></button></div></div>
+        <div className={styles.planHeading}><h2>{currentSubscription?.plan.name || "Morrow Personal"}</h2><div className={styles.planControls}><span className={styles.statusPill}>{subscriptionStatusLabel(currentSubscription, hasPaidAccess, clock)}</span><button className={styles.iconButton} aria-label="Refresh subscription" title="Refresh subscription" onClick={refreshAccess} disabled={Boolean(busy)}><ArrowClockwise className={busy === "refresh" ? styles.spin : undefined} size={18} /></button></div></div>
         {subscriptionNeedsRecovery && currentSubscription && <SubscriptionRecoveryGuidance status={currentSubscription.status} hasPaidAccess={hasPaidAccess} />}
         {hasPaidAccess && currentSubscription ? <>
           <p>{currentSubscription.status === "trial_canceled" ? `Trial canceled. Access until ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}. You won't be charged.` : currentSubscription.status === "trialing" ? `${Math.max(0, Math.ceil((Date.parse(currentSubscription.trial_ends_at || currentSubscription.paid_until!) - clock) / 86400000))} days left · first charge on ${day(currentSubscription.trial_ends_at || currentSubscription.paid_until)}.` : currentSubscription.access_source === "admin_coupon" ? "Complimentary access" : `Billed ${currentSubscription.plan.period}. Your exact charges are shown on your payment receipts.`}</p>

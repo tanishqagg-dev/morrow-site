@@ -8,7 +8,10 @@
 
 .planOptions{margin-top:24px}.planOptions .planOption:last-of-type{margin-bottom:0}
 
-.embeddedAuth :global(*),.embeddedAuth :global(*::before),.embeddedAuth :global(*::after){box-shadow:none!important;filter:none!important}
+/* OTP boundaries and focus rings belong to Clerk, not the button shadow reset. */
+.embeddedAuth :global(.cl-otpCodeFieldInput){border:1px solid #737373!important;border-radius:8px!important}
+.embeddedAuth :global(.cl-otpCodeFieldInput:focus-visible),.embeddedAuth :global(.cl-formFieldInput:focus-visible){outline:2px solid #111!important;outline-offset:3px}
+.embeddedAuth :global(.cl-formResendCodeLink),.embeddedAuth :global(.cl-alternativeMethodsBlockButton){color:#111!important;text-decoration:underline;text-underline-offset:3px}
 .embeddedAuth :global(.cl-formButtonPrimary){background:#F5D33F!important;color:#0A0A0A!important;border:0!important}
 
 .embeddedAuth :global(button){background-image:none!important}
