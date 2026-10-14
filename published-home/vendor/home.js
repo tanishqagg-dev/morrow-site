@@ -92,8 +92,21 @@
       if (debug) gpu = cleanGPU(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL));
     } catch {}
     const memory = navigator.deviceMemory, cores = navigator.hardwareConcurrency;
+    const realPlatform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
+    const realWindows = /Win/i.test(realPlatform), realMac = /Mac/i.test(realPlatform);
+    const mismatch = (os === 'windows' && !realWindows) || (os === 'mac' && !realMac);
     function render(osName, arch) {
       const facts = [];
+      if (mismatch) {
+        // The visitor is reading the other computer's edition. Describe that computer, not this one.
+        facts.push(os === 'windows' ? 'Made for <b>Windows 10 and 11 PCs</b>' : 'Made for <b>Apple silicon Macs</b>');
+        facts.push(os === 'windows' ? '64-bit' : 'macOS 13 or later');
+        facts.push(os === 'windows' ? 'Setup 0.3.27' : 'Notarized by Apple');
+        out.innerHTML = facts.map(function (fact) { return '<span>' + fact + '</span>'; }).join('');
+        const title = document.querySelector('[data-wintitle]');
+        if (title) title.textContent = os === 'windows' ? 'Morrow on Windows' : 'Morrow';
+        return;
+      }
       if (os === 'windows') {
         facts.push('Made for <b>this ' + (osName || 'Windows') + ' PC</b>');
         if (arch) facts.push(arch);
