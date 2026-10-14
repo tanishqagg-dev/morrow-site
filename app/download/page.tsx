@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { MacDownload } from '@/components/MacDownload';
+import windowsRelease from '@/lib/windows-release.json';
 import styles from './download.module.css';
 
 export const metadata: Metadata = { title: 'Download Morrow for Mac', description: 'Install the Morrow private beta on your Mac, then enter your invitation and subscribe. Setup video and fixes for common problems.' };
@@ -29,6 +30,8 @@ export default function DownloadPage() {
             <div className={styles.side}>
               <p>Download first. Your invitation and subscription are handled inside Morrow.</p>
               <MacDownload />
+              <a className={`button ${styles.windows}`} href={windowsRelease.downloadUrl} download>Download Morrow for Windows</a>
+              <p className={styles.windowsNote}>Windows 10 or 11, 64-bit. The installer isn&apos;t code-signed yet, so Windows may warn before it runs: choose More info, then Run anyway.</p>
             </div>
           </div>
           <ol className={styles.steps}>

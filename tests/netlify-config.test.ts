@@ -25,7 +25,7 @@ describe("Netlify production configuration", () => {
       readFile(new URL("../package.json", import.meta.url), "utf8"),
       readFile(new URL("../scripts/clear-next-output.mjs", import.meta.url), "utf8"),
     ]);
-    expect(packageJson).toContain('"prebuild": "node scripts/validate-production-environment.mjs && node scripts/prepare-mac-download.mjs && node scripts/clear-next-output.mjs"');
+    expect(packageJson).toContain('"prebuild": "node scripts/validate-production-environment.mjs && node scripts/prepare-mac-download.mjs && node scripts/prepare-windows-download.mjs && node scripts/clear-next-output.mjs"');
     expect(packageJson).toContain('"pretypecheck": "node scripts/clear-next-output.mjs"');
     expect(cleanup).toContain('resolve(websiteDirectory, ".next")');
     expect(cleanup).toContain('resolve(websiteDirectory, "out")');
