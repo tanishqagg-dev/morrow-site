@@ -98,7 +98,7 @@ html[data-os="windows"] .demo-screen{border-radius:10px}
 html[data-os="windows"] .button{border-radius:10px}
 html[data-os="windows"] .demo-island .island-context{opacity:.6}
 html[data-os="windows"] .demo-island .island-content p{font-size:28px}
-@media(max-width:700px){.win-controls i{width:34px;height:28px}html[data-os="windows"] .window-dots{display:none}.os-switch{margin-right:0}.os-switch button{padding:0 10px}.os-switch button span{display:none}.hero-other{font-size:12px}}
+@media(max-width:700px){.nav .button svg{display:none}.nav .button{padding-inline:14px}.win-controls i{width:34px;height:28px}html[data-os="windows"] .window-dots{display:none}.os-switch{margin-right:0}.os-switch button{padding:0 10px}.os-switch button span{display:none}.hero-other{font-size:12px}}
 
 /* ---------- The edition for this computer ---------- */
 .edition{padding-top:0}

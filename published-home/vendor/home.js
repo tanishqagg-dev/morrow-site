@@ -40,6 +40,13 @@
     window.dispatchEvent(new CustomEvent('morrow:os-changed', { detail: os }));
   }
   function moveThumbs() {
+    // Narrow screens: the nav download button says just Download, so it fits beside the switch.
+    document.querySelectorAll('.nav-download .roll > span').forEach(function (span) {
+      const full = span.getAttribute('data-full') || span.textContent;
+      span.setAttribute('data-full', full);
+      const label = innerWidth <= 700 ? 'Download' : full;
+      if (span.textContent !== label) { span.textContent = label; span.setAttribute('data-text', label); }
+    });
     document.querySelectorAll('[data-os-switch]').forEach(function (group) {
       const on = group.querySelector('[data-os-pick="' + os + '"]');
       const thumb = group.querySelector('.os-thumb');
