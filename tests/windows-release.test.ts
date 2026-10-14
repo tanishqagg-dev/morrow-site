@@ -34,12 +34,13 @@ it('links only the exact reviewed setup and rejects modified or linked files', a
 });
 
 it('points every Windows download button at the reviewed setup', async () => {
-  const [home, page] = await Promise.all([
+  const [home, component] = await Promise.all([
     readFile(new URL('../published-home/index.html', import.meta.url), 'utf8'),
-    readFile(new URL('../app/download/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/WindowsDownload.tsx', import.meta.url), 'utf8'),
   ]);
   const links=[...home.matchAll(/href="([^"]+\.exe)"/g)].map(match=>match[1]);
-  expect(links.length).toBeGreaterThan(0);
   for (const link of links) expect(link).toBe(release.downloadUrl);
-  expect(page).toContain('windows-release.json');
+  expect(home).toContain('href="/download?os=windows&amp;start=1"');
+  expect(component).toContain('windows-release.json');
+  expect(component).toContain('release.downloadUrl');
 });

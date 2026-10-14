@@ -14,6 +14,8 @@ export async function preservePublishedHome() {
   if(!html.includes('id="animated-mascot"') || !html.includes('name="morrow-beta"') || !html.includes('href="#beta"')) throw new Error("Published homepage or beta form is missing.");
   if(!html.includes('href="/subscribe"')) throw new Error("Published homepage is missing the invited-customer sign-in link.");
   await writeFile(new URL("out/_redirects", root), [
+    "/mac /?os=mac 302",
+    "/windows /?os=windows 302",
     "/subscribe /subscribe.html 200",
     "/download /download.html 200",
     "/operator /operator.html 200",

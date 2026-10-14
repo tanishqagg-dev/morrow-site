@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { HeaderDownload } from "./HeaderDownload";
 
 type SiteHeaderProps = {
   accountControl?: ReactNode;
@@ -18,7 +19,7 @@ export function SiteHeader({ activePage, accountControl }: SiteHeaderProps) {
           <Link href="/contact">Help</Link>
           {activePage !== "download" && <Link href="/subscribe" aria-current={activePage === "subscribe" ? "page" : undefined}>Your account</Link>}
         </nav>
-        <a className={`button ${activePage === "download" ? "button-quiet" : "button-primary"}`} href={activePage === "download" ? "/subscribe?view=subscription" : "/download?start=1"}>{activePage === "download" ? "Your account" : "Download for Mac"}</a>
+        {activePage === "download" ? <a className="button button-quiet" href="/subscribe?view=subscription">Your account</a> : <HeaderDownload />}
         </> : <div className="account-header-control">{accountControl}</div>}
       </div>
     </header>

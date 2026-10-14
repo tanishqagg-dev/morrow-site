@@ -59,3 +59,86 @@ html.motion-off .roll>span{transform:none!important}
 .bharat-line{width:100%;height:0;border-top:1px solid #525252;margin-top:40px}
 .pricing-links{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:24px}.pricing-intro .pricing-links .text-link{margin-top:0}
 @media(max-width:700px){.demo.is-live .demo-island{width:calc(100% - 32px)}.island-content{width:calc(100% - 24px)}.demo-island .island-content img{border-radius:20px}.demo-island .island-content p{font-size:22px;padding:10px 12px;margin-top:20px}.demo:not(.is-live) .demo-island{min-height:350px}.bharat-title{font-size:88px;line-height:1;margin-block:56px}.bharat-line{margin-top:32px}}
+
+/* ---------- Two editions of one page. Elements marked data-only belong to one computer. ---------- */
+html[data-os="windows"] [data-only="mac"]{display:none!important}
+html[data-os="mac"] [data-only="windows"]{display:none!important}
+.os-switch{position:relative;display:inline-flex;align-items:center;background:var(--surface);border-radius:999px;padding:3px;margin-right:16px;isolation:isolate}
+.os-switch button{position:relative;z-index:1;display:inline-flex;align-items:center;gap:7px;border:0;background:transparent;border-radius:999px;min-height:36px;padding:0 13px;font-size:13px;font-weight:700;color:var(--secondary);transition:color var(--t-state) var(--ease-soft)}
+.os-switch button svg{width:13px;height:13px;fill:currentColor}
+.os-switch button[aria-pressed="true"]{color:var(--white)}
+.os-thumb{position:absolute;top:3px;left:0;height:calc(100% - 6px);width:60px;background:var(--ink);border-radius:999px;transform:translateX(3px);transition:transform var(--t-state) var(--ease-io),width var(--t-state) var(--ease-io)}
+.nav.is-dark .os-switch{background:#262626}.nav.is-dark .os-switch button{color:#A3A3A3}.nav.is-dark .os-switch button[aria-pressed="true"]{color:var(--ink)}.nav.is-dark .os-thumb{background:var(--white)}
+.switch-link{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:0;min-height:36px;font-size:inherit;font-weight:700;color:var(--ink);text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:1.5px;transition:text-underline-offset var(--t-hover) var(--ease-soft)}
+@media(hover:hover){.switch-link:hover{text-underline-offset:7px}}
+.hero-other{font-size:13px;color:var(--secondary);margin-top:10px;display:flex;justify-content:center;align-items:center;gap:8px;flex-wrap:wrap}
+.hero-spec{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 0;font-size:13px;color:var(--secondary);margin-top:6px;font-variant-numeric:tabular-nums;min-height:20px}
+.hero-spec span+span::before{content:"·";margin:0 9px;color:#A3A3A3}
+.hero-spec b{color:var(--ink);font-weight:700}
+.hero-spec:empty{display:none}
+.hero-mascot-button{display:block;margin:0 auto 24px;border:0;background:none;padding:0;cursor:pointer;border-radius:50%}
+.hero-mascot-button .hero-mascot{margin:0}
+.bubble{position:absolute;left:50%;top:92px;transform:translate(-50%,0);background:var(--ink);color:var(--white);font-size:14px;font-weight:700;padding:9px 14px;border-radius:12px;white-space:nowrap;opacity:0;visibility:hidden;pointer-events:none;z-index:3}
+.bubble.is-on{opacity:1;visibility:visible;transition:opacity var(--t-state)}
+.hero-copy{position:relative}
+.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;font-weight:700;color:var(--muted);margin-bottom:16px}
+/* Windows window chrome: the three buttons sit at the right, like every Windows app. */
+.win-controls{display:none;height:100%;margin-right:-14px}
+.win-controls i{width:40px;height:34px;display:grid;place-items:center;color:var(--secondary);cursor:pointer;transition:background var(--t-hover) var(--ease-soft),color var(--t-hover) var(--ease-soft)}
+.win-controls i svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1.1}
+.win-controls i:hover{background:var(--line);color:var(--ink)}
+.win-controls i.x:hover{background:#C42B1C;color:var(--white)}
+html[data-os="windows"] .window-dots{visibility:hidden}
+html[data-os="windows"] .window-bar-end{width:auto;display:flex;justify-content:flex-end;height:100%}
+html[data-os="windows"] .win-controls{display:flex}
+html[data-os="windows"] .window{border-radius:10px}
+html[data-os="windows"] .window-bar{justify-content:flex-start;gap:14px}
+html[data-os="windows"] .window-bar-end{margin-left:auto}
+html[data-os="windows"] .demo-screen{border-radius:10px}
+html[data-os="windows"] .button{border-radius:10px}
+html[data-os="windows"] .demo-island .island-context{opacity:.6}
+html[data-os="windows"] .demo-island .island-content p{font-size:28px}
+@media(max-width:700px){.win-controls i{width:34px;height:28px}html[data-os="windows"] .window-dots{display:none}.os-switch{margin-right:0}.os-switch button{padding:0 10px}.os-switch button span{display:none}.hero-other{font-size:12px}}
+
+/* ---------- The edition for this computer ---------- */
+.edition{padding-top:0}
+.edition-layout{display:grid;grid-template-columns:.9fr 1.1fr;gap:clamp(40px,7vw,112px);align-items:start}
+.edition-copy{position:sticky;top:104px}
+.edition-copy p:not(.eyebrow){max-width:380px;color:var(--secondary);font-size:18px;margin-top:28px}
+.edition-copy .text-link{margin-top:24px}
+.edition-rows{margin:0}
+.edition-rows>div{display:grid;grid-template-columns:96px 1fr;gap:24px;border-top:1px solid var(--line);padding-block:24px}
+.edition-rows>div:last-child{border-bottom:1px solid var(--line)}
+.edition-rows dt{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding-top:5px;font-variant-numeric:tabular-nums}
+.edition-rows dd strong{display:block;font-size:19px;letter-spacing:-.015em;margin-bottom:6px}
+.edition-rows dd{color:var(--secondary);max-width:560px}
+.edition-rows dd a{text-decoration:underline;text-underline-offset:3px;color:var(--ink)}
+@media(max-width:1000px){.edition-layout{gap:48px}}
+@media(max-width:700px){.edition-layout{grid-template-columns:1fr;gap:32px}.edition-copy{position:static}.edition-copy p:not(.eyebrow){font-size:17px}.edition-rows>div{grid-template-columns:1fr;gap:8px;padding-block:20px}}
+
+/* ---------- tomorrow becomes morrow ---------- */
+.tomorrow{padding-top:clamp(64px,8vw,112px);overflow:hidden;border-top:1px solid var(--line)}
+.tomorrow-head{display:flex;justify-content:space-between;align-items:flex-end;gap:48px}
+.tomorrow-head p{max-width:360px;color:var(--secondary);font-size:18px}
+.stage{position:relative;height:clamp(360px,68vh,720px);margin-top:8px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.word{position:absolute;left:50%;top:26%;transform:translateX(-50%);display:flex;font-weight:900;font-size:clamp(4.4rem,17.5vw,19rem);line-height:1;letter-spacing:-.06em;white-space:nowrap;margin:0}
+.ch{display:inline-block;will-change:transform}
+.ch.is-free{cursor:grab}.ch.is-free:active{cursor:grabbing}
+.ball{position:absolute;left:0;top:0;width:100px;height:100px;border-radius:50%;display:grid;place-items:center;will-change:transform;cursor:grab;opacity:0;visibility:hidden}
+.ball:active{cursor:grabbing}.ball img{width:100%;height:100%}
+.floor{position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--ink)}
+.tomorrow-foot{display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;padding-block:24px clamp(64px,8vw,112px)}
+.tomorrow-foot span{font-size:14px;color:var(--secondary)}
+.no-physics .word{top:32%}.no-physics .ball,.no-physics .tomorrow-foot .button{display:none}
+@media(max-width:700px){.tomorrow-head{display:block}.tomorrow-head p{margin-top:20px;font-size:16px}.stage{height:clamp(300px,56vh,480px)}.word{letter-spacing:-.05em}}
+
+/* ---------- Liquid glass on the Mac nav (switched on by the engine once WebGL is confirmed) ---------- */
+.glass-on .nav{background:transparent;border-bottom:0;padding-top:10px}
+.glass-on .nav.is-scrolled{border-bottom-color:transparent}
+.glass-on .nav-inner{height:60px;border-radius:999px;padding-inline:14px 8px;background:transparent}
+.glass-on .nav .wrap.nav-inner{max-width:calc(var(--max) - 24px)}
+.glass-on .nav.is-dark{background:transparent}
+.glass-on .nav .os-switch{background:rgba(0,0,0,.07)}
+.glass-on .nav.is-dark .os-switch{background:rgba(255,255,255,.16)}
+/* liquidGL switches pointer events off on each lens; the things inside still need to be clickable. */
+.glass *{pointer-events:auto}

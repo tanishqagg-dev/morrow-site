@@ -6,7 +6,7 @@ import { billingRequest, parseBillingCatalog } from '@/lib/billing';
 import styles from '@/app/download/download.module.css';
 
 gsap.registerPlugin(useGSAP);
-const DownloadTrial = createContext<boolean | null>(null);
+export const DownloadTrial = createContext<boolean | null>(null);
 export function DownloadTrialProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   useEffect(() => {

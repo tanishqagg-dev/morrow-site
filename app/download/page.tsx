@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import { DownloadTrialProvider, DownloadSteps, LegacySetupVideo } from '@/components/DownloadGuide';
+import { DownloadTrialProvider, LegacySetupVideo } from '@/components/DownloadGuide';
+import { PlatformDownload } from '@/components/PlatformDownload';
 import { SiteHeader } from '@/components/SiteHeader';
 import { SiteFooter } from '@/components/SiteFooter';
-import { MacDownload } from '@/components/MacDownload';
 import styles from './download.module.css';
 
-export const metadata: Metadata = { title: 'Download Morrow for Mac', description: 'Install Morrow on your Mac, then create your account and review your plan. Setup video and fixes for common problems.' };
+export const metadata: Metadata = { title: 'Download Morrow', description: 'Install Morrow on your Mac or Windows PC, then create your account and review your plan. Install steps and fixes for common problems.' };
 
 // Videos live in published-home/media and are copied to the site root at build time.
 const fixes = [
@@ -20,9 +20,8 @@ export default function DownloadPage() {
     <DownloadTrialProvider><div className={styles.page}><SiteHeader activePage="download" /><main id="main-content">
       <section className={styles.top}>
         <div className={styles.wrap}>
-          <div className={styles.hero}><MacDownload /></div>
-          <DownloadSteps />
-          <p className={styles.note}>Computer control needs the official ChatGPT or Codex desktop app installed and running. In Morrow, use Settings &gt; Permissions to check the connection and allow the requested macOS access.</p>
+          <PlatformDownload />
+          <p className={styles.note}>On a Mac, computer control needs the official ChatGPT or Codex desktop app installed and running. In Morrow, use Settings &gt; Permissions to check the connection and allow the requested macOS access.</p>
         </div>
       </section>
 

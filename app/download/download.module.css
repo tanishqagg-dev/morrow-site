@@ -9,3 +9,8 @@
 
 .appCapture{height:360px;object-fit:cover}
 @media(max-width:700px){.appCapture{height:220px}}
+
+.platformSwitch{font-size:14px;color:#525252;margin:18px 0 0}
+.winBar{grid-template-columns:1fr auto;text-align:left}.winControls{display:flex;gap:0;margin-right:-14px}.winControls i{display:grid;place-items:center;width:40px;height:42px;font-style:normal;font-size:11px;color:#525252}
+.smartScreen{padding:28px 32px;text-align:left;min-height:190px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:#525252;line-height:1.5}.smartTitle{font-size:20px;font-weight:700;color:#0A0A0A;letter-spacing:-.02em;margin:0}.smartScreen p{margin:0;max-width:52ch}.smartMore{color:#0A0A0A}.smartButtons{display:flex;gap:10px;margin-top:8px}.smartButtons span{display:inline-flex;align-items:center;min-height:34px;padding:0 16px;border:1px solid #D4D4D4;border-radius:4px;font-weight:700;color:#0A0A0A;background:#FFF}.smartPrimary{background:#0A0A0A!important;color:#FFF!important;border-color:#0A0A0A!important}
+@media(max-width:700px){.smartScreen{padding:18px 16px;min-height:160px;font-size:12px}.smartTitle{font-size:17px}.winControls i{width:32px;height:34px}}
