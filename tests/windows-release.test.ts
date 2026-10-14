@@ -28,7 +28,7 @@ it('links only the exact reviewed setup and rejects modified or linked files', a
     await expect(prepareWindowsDownload(source,fixture)).rejects.toThrow('checksum');
     await expect(prepareWindowsDownload(source,{...fixture,filename:'../other.exe'})).rejects.toThrow('manifest');
     await expect(prepareWindowsDownload(source,{...fixture,downloadUrl:'https://example.com/unreviewed.exe'})).rejects.toThrow('manifest');
-    try { await symlink(source,join(root,'linked.exe')); } catch { return; } // Windows needs extra rights for symlinks.
+    try { await symlink(source,join(root,'linked.exe')); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EPERM') return; throw error; } // Windows needs Developer Mode for symlinks.
     await expect(prepareWindowsDownload(join(root,'linked.exe'),fixture)).rejects.toThrow('file type');
   } finally {await rm(root,{recursive:true,force:true});}
 });

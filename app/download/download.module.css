@@ -20,6 +20,7 @@
 .side :global(details) { font-size: 13px; }
 .side .windows { background: transparent; color: #000; border: 2px solid #000; margin-top: 18px; }
 .side .windowsNote { font-size: 13px; margin: 10px 0 0; max-width: 34em; }
+.side .windowsNote a { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
 .steps { list-style: none; counter-reset: s; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin: 0; padding: 0 0 54px; }
 .steps li { counter-increment: s; border-top: 2px solid #000; padding-top: 14px; font-size: 15.5px; }
 .steps li::before { content: "Step " counter(s); display: block; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
