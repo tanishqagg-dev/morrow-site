@@ -18,7 +18,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean } = {}) {
         <a href={`mailto:${siteConfig.supportEmail}`}>{siteConfig.supportEmail}</a>
         <Link href="/open-source">Open source</Link>
       </div>
-      <p className="footer-note">Made by {siteConfig.company.name}, {siteConfig.company.city}, {siteConfig.company.country}. Morrow is independent and not affiliated with or endorsed by OpenAI. Private legacy builds also support 64-bit Windows 10 or 11 PCs.</p>
+      <p className="footer-note">Made by {siteConfig.company.name}, {siteConfig.company.city}, {siteConfig.company.country}. Morrow is independent and not affiliated with or endorsed by OpenAI. Morrow runs on Apple silicon Macs and 64-bit Windows 10 or 11 PCs.</p>
     </footer>
   );
 }

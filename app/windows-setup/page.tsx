@@ -4,10 +4,11 @@ import { ArrowRight, Buildings, CheckCircle, Laptop } from "@phosphor-icons/reac
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { siteConfig } from "@/lib/site-config";
+import windowsRelease from "@/lib/windows-release.json";
 
 export const metadata: Metadata = {
   title: "Windows setup",
-  description: "Plain-language setup help for the private Morrow Windows pilot.",
+  description: "Install Morrow on Windows 10 or 11, and what to do if Windows warns about the installer.",
 };
 
 export default function WindowsSetupPage() {
@@ -16,54 +17,60 @@ export default function WindowsSetupPage() {
       <SiteHeader />
       <main id="main-content" className="subpage-main privacy-page windows-setup-page">
         <header>
-          <h1>Install Morrow on a Windows work laptop.</h1>
-          <p>Start with your Morrow account. The right installation route depends on whether your company manages the computer.</p>
+          <h1>Install Morrow on Windows.</h1>
+          <p>Morrow runs on Windows 10 and 11, 64-bit. Download the setup, run it, then sign in with your Morrow account.</p>
         </header>
 
         <aside className="pilot-notice" aria-labelledby="pilot-note-title">
           <CheckCircle aria-hidden="true" weight="duotone" />
           <div>
-            <h2 id="pilot-note-title">Private pilot note</h2>
-            <p>Until trusted Windows signing is complete, the assisted pilot is handed over privately by Morrow support with a SHA-256 that must match the separate authenticated build record.</p>
+            <h2 id="pilot-note-title">The installer isn&apos;t code-signed yet</h2>
+            <p>Windows may show &quot;Windows protected your PC&quot; before Morrow Setup runs. Choose More info, check that the file is Morrow-Setup-{windowsRelease.version}.exe, then choose Run anyway.</p>
+            <details>
+              <summary>Verify your download</summary>
+              <code style={{ overflowWrap: "anywhere" }}>SHA-256 {windowsRelease.sha256}</code>
+            </details>
           </div>
         </aside>
 
         <div className="privacy-content windows-setup-content">
           <section>
-            <h2><Buildings aria-hidden="true" weight="duotone" />Company-managed laptop</h2>
+            <h2><Laptop aria-hidden="true" weight="duotone" />Personal or unmanaged laptop</h2>
             <div>
-              <p>Send the private pilot package to your IT administrator. They can review the exact build and deploy it through the company&apos;s approved app-management system.</p>
-              <p>Do not change Smart App Control, Defender, SmartScreen, or company security policy.</p>
+              <p>Download Morrow Setup {windowsRelease.version} and open it. When setup finishes, open Morrow from the Start menu.</p>
+              <p>If Windows blocks the app without a Run anyway option, Smart App Control is on. Never turn off Smart App Control just to install Morrow. Contact support instead.</p>
             </div>
           </section>
 
           <section>
-            <h2><Laptop aria-hidden="true" weight="duotone" />Personal or unmanaged laptop</h2>
+            <h2><Buildings aria-hidden="true" weight="duotone" />Company-managed laptop</h2>
             <div>
-              <p>A subscription does not make an unsigned installer trusted. Install only the private package supplied by Morrow support after its SHA-256 matches the separate authenticated build record.</p>
-              <p>If Windows blocks the app without its normal continue option, stop and contact Morrow support.</p>
-              <p>Never turn off Smart App Control just to install Morrow.</p>
+              <p>Send the download link and SHA-256 above to your IT administrator. They can review the exact build and deploy it through the company&apos;s approved app-management system.</p>
+              <p>Do not change Smart App Control, Defender, SmartScreen, or company security policy.</p>
             </div>
           </section>
 
           <section>
             <h2>After installation</h2>
             <ol>
-              <li>Open Morrow and sign in with the account you subscribed with.</li>
+              <li>Open Morrow and enter the invitation code you received.</li>
+              <li>Sign in and pay ₹2,999/month + 18% GST through Razorpay.</li>
               <li>Complete the official ChatGPT browser sign-in.</li>
-              <li>Allow microphone access when Windows asks.</li>
-              <li>Speak your first request. Morrow never asks for an OpenAI API key.</li>
+              <li>Allow microphone access when Windows asks, then speak your first request. Morrow never asks for an OpenAI API key.</li>
             </ol>
           </section>
         </div>
 
         <div className="windows-setup-actions">
-          <Link className="button button-primary" href="/subscribe">
-            Manage subscription
+          <a className="button button-primary" href={windowsRelease.downloadUrl} download>
+            Download Morrow for Windows
             <ArrowRight aria-hidden="true" weight="bold" />
+          </a>
+          <Link className="button button-secondary" href="/subscribe">
+            Manage subscription
           </Link>
-          <a className="button button-secondary" href={siteConfig.supportUrl} target="_blank" rel="noreferrer">
-            Contact Morrow support
+          <a className="button button-secondary" href={`mailto:${siteConfig.supportEmail}`}>
+            Contact support
           </a>
         </div>
       </main>
