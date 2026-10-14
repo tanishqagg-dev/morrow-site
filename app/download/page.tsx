@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import { MacDownload } from '@/components/MacDownload';
+import windowsRelease from '@/lib/windows-release.json';
 import styles from './download.module.css';
 
-export const metadata: Metadata = { title: 'Download Morrow for Mac', description: 'Install the Morrow private beta on your Mac, then enter your invitation and subscribe. Setup video and fixes for common problems.' };
+export const metadata: Metadata = { title: 'Download Morrow', description: 'Install the Morrow private beta on your Mac or Windows PC, then enter your invitation and subscribe. Setup video and fixes for common problems.' };
 
 // Videos live in published-home/media and are copied to the site root at build time.
 const fixes = [
@@ -23,21 +24,23 @@ export default function DownloadPage() {
           </div>
           <div className={styles.hero}>
             <div>
-              <p className={styles.meta}>Private paid beta · Apple silicon Mac · macOS 13 or later</p>
-              <h1 className={styles.title}>Start on your Mac.</h1>
+              <p className={styles.meta}>Private paid beta · Apple silicon Mac, macOS 13 or later · Windows 10 or 11</p>
+              <h1 className={styles.title}>Start on your computer.</h1>
             </div>
             <div className={styles.side}>
               <p>Download first. Your invitation and subscription are handled inside Morrow.</p>
               <MacDownload />
+              <a className={`button ${styles.windows}`} href={windowsRelease.downloadUrl} download>Download Morrow for Windows</a>
+              <p className={styles.windowsNote}>Windows 10 or 11, 64-bit. The installer isn&apos;t code-signed yet, so Windows may warn before it runs: choose More info, then Run anyway. <a href="/windows-setup">Windows setup help</a></p>
             </div>
           </div>
           <ol className={styles.steps}>
-            <li>Open the DMG and drag Morrow to Applications.</li>
+            <li>Mac: open the DMG and drag Morrow to Applications. Windows: run Morrow Setup.</li>
             <li>Open Morrow and enter the invitation code you received.</li>
             <li>Sign in and pay ₹2,999/month + 18% GST through Razorpay.</li>
-            <li>Morrow continues automatically. Connect your ChatGPT account and follow the Mac walkthrough.</li>
+            <li>Morrow continues automatically. Connect your ChatGPT account and follow the walkthrough.</li>
           </ol>
-          <p className={styles.note}>Computer control needs the official ChatGPT or Codex desktop app installed and running. In Morrow, use Settings &gt; Permissions to check the connection and allow the requested macOS access.</p>
+          <p className={styles.note}>On a Mac, computer control needs the official ChatGPT or Codex desktop app installed and running. In Morrow, use Settings &gt; Permissions to check the connection and allow the requested macOS access.</p>
         </div>
       </section>
 

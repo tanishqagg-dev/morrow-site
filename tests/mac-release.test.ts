@@ -25,10 +25,10 @@ it('publishes only the exact reviewed installer and rejects modified or linked f
     await writeFile(source,bytes);await expect(prepareMacDownload(source,release)).resolves.toBeUndefined();
     await writeFile(source,Buffer.from('modified fixture'));
     await expect(prepareMacDownload(source,release)).rejects.toThrow('checksum');
-    await symlink(source,join(root,'linked.dmg'));
-    await expect(prepareMacDownload(join(root,'linked.dmg'),release)).rejects.toThrow('file type');
     await expect(prepareMacDownload(source,{...release,filename:'../other.dmg'})).rejects.toThrow('manifest');
     await expect(prepareMacDownload(source,{...release,downloadUrl:'https://example.com/unreviewed.dmg'})).rejects.toThrow('manifest');
+    try { await symlink(source,join(root,'linked.dmg')); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EPERM') return; throw error; } // Windows needs Developer Mode for symlinks.
+    await expect(prepareMacDownload(join(root,'linked.dmg'),release)).rejects.toThrow('file type');
   } finally {await rm(root,{recursive:true,force:true});}
 });
 

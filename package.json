@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/validate-production-environment.mjs && node scripts/prepare-mac-download.mjs && node scripts/clear-next-output.mjs",
+    "prebuild": "node scripts/validate-production-environment.mjs && node scripts/prepare-mac-download.mjs && node scripts/prepare-windows-download.mjs && node scripts/clear-next-output.mjs",
     "build": "next build && node scripts/preserve-published-home.mjs && node scripts/write-static-headers.mjs",
     "start": "next start",
     "pretypecheck": "node scripts/clear-next-output.mjs",
