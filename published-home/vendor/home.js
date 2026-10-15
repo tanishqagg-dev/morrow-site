@@ -244,7 +244,7 @@
     gsap.set('[data-hide]', { visibility: 'visible' });
     moveThumbs();
     const intro = gsap.timeline({ delay: .1, onComplete: function () { setTimeout(startGlass, 150); } });
-    SplitText.create('.hero h1', { type: 'lines', mask: 'lines', linesClass: 'split-line', autoSplit: true,
+    SplitText.create('.hero h1', { type: 'lines,words', mask: 'lines', linesClass: 'split-line', wordsClass: 'hero-word', autoSplit: true,
       onSplit: function (self) { heroSplit = self; return intro.from(self.lines, { yPercent: 110, duration: 1.1, stagger: .08 }, .12); } });
     intro.from('.hero-summary', { y: 16, opacity: 0, duration: 1 }, .35)
       .from('.hero-media', { y: 32, opacity: 0, duration: 1 }, 1.4);
@@ -287,7 +287,7 @@
       gsap.from(element.querySelector('img'), { clipPath: 'inset(0% 0% 100% 0% round 24px)', scale: 1.08, duration: 1.3,
         scrollTrigger: { trigger: element, start: 'top 88%', once: true } });
     });
-    const statement = SplitText.create('[data-scrub]', { type: 'words' });
+    const statement = SplitText.create('[data-scrub]', { type: 'words', wordsClass: 'scrub-word' });
     gsap.fromTo(statement.words, { opacity: .2 }, { opacity: 1, ease: 'none', stagger: .08,
       scrollTrigger: { trigger: '[data-scrub]', start: 'top 80%', end: 'bottom 45%', scrub: true } });
     gsap.from('.control-rows>div', { x: 24, opacity: 0, duration: .8, stagger: .08,
@@ -347,7 +347,8 @@
     const ballEl = stage.querySelector('[data-ball]');
     const hint = document.querySelector('[data-physics-hint]');
     const M = window.Matter;
-    let running = false, dropped = false, dragging = null, pointerHist = [], ticking = false;
+    let running = false, dropped = false, dragging = null, pointerHist = [], ticking = false, lastThud = 0;
+    const extras = [];
     let engineM = null, world = null, statics = [], walls = [], W = 0, H = 0, letterBoxes = [];
     const bodies = {};
     function measure() {
@@ -358,6 +359,15 @@
       if (engineM) return;
       engineM = M.Engine.create({ enableSleeping: false, gravity: { x: 0, y: 1.9 } });
       world = engineM.world;
+      // A hard landing makes the page's Morrow react.
+      M.Events.on(engineM, 'collisionStart', function (event) {
+        const now = performance.now();
+        if (now - lastThud < 1500) return;
+        event.pairs.forEach(function (pair) {
+          const speed = Math.max(pair.bodyA.speed || 0, pair.bodyB.speed || 0);
+          if (speed > 14 && now - lastThud > 1500) { lastThud = now; window.dispatchEvent(new CustomEvent('morrow:thud', { detail: speed })); }
+        });
+      });
       rebuildWalls();
     }
     function rebuildWalls() {
@@ -421,6 +431,7 @@
       const t = bodies.t, b = bodies.ball;
       t.el.style.transform = 'translate(' + (t.body.position.x - t.ox - (letterBoxes[0].x + letterBoxes[0].w / 2)) + 'px,' + (t.body.position.y - t.oy - (letterBoxes[0].y + letterBoxes[0].h / 2)) + 'px) rotate(' + t.body.angle + 'rad)';
       b.el.style.transform = 'translate(' + (b.body.position.x - b.w / 2) + 'px,' + (b.body.position.y - b.h / 2) + 'px) rotate(' + b.body.angle + 'rad)';
+      extras.forEach(function (x) { x.el.style.transform = 'translate(' + (x.body.position.x - x.w / 2) + 'px,' + (x.body.position.y - x.h / 2) + 'px) rotate(' + x.body.angle + 'rad)'; });
       if (dragging) {
         M.Body.setPosition(dragging.item.body, { x: dragging.target.x, y: dragging.target.y });
         M.Body.setVelocity(dragging.item.body, { x: 0, y: 0 });
@@ -465,12 +476,47 @@
       if (!dropped) return;
       running = false; stopTicking(); dragging = null;
       M.Composite.remove(world, [bodies.t.body, bodies.ball.body]); M.Composite.remove(world, statics); statics = [];
+      extras.splice(0).forEach(function (x) { M.Composite.remove(world, x.body); x.el.remove(); });
       chars.forEach(function (char) { char.removeAttribute('style'); char.classList.remove('is-free'); gsap.set(char, { clearProps: 'all' }); });
       word.removeAttribute('style');
       gsap.set(ballEl, { autoAlpha: 0, clearProps: 'transform' });
       dropped = false;
       gsap.from(chars, { yPercent: 40, autoAlpha: 0, duration: .8, stagger: .05, ease: 'expo.out', onComplete: function () { setTimeout(drop, 500); } });
     }
+    // Tap anywhere on the stage to drop another Morrow. Each one has its own weight and bounce, and can be thrown too.
+    function spawn(x, y) {
+      if (!dropped || !world) return;
+      const r = 16 + Math.random() * 18;
+      const el = document.createElement('div');
+      el.className = 'ball mini';
+      el.innerHTML = '<img src="assets/morrow-mark-112.png" width="112" height="112" alt="">';
+      el.style.width = el.style.height = r * 2 + 'px';
+      stage.appendChild(el);
+      const body = M.Bodies.circle(x, y, r, { restitution: .75, friction: .05, frictionAir: .006, density: .0012 });
+      M.Body.setVelocity(body, { x: (Math.random() - .5) * 8, y: -4 - Math.random() * 4 });
+      M.Body.setAngularVelocity(body, (Math.random() - .5) * .3);
+      M.Composite.add(world, body);
+      const item = { body: body, el: el, w: r * 2, h: r * 2 };
+      extras.push(item);
+      el.addEventListener('pointerdown', function (event) { grab(item, event); });
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onUp);
+      gsap.from(el.firstChild, { scale: 0, rotation: -90, duration: .45, ease: 'back.out(2.2)' });
+      if (extras.length > 16) { const old = extras.shift(); M.Composite.remove(world, old.body); gsap.to(old.el, { autoAlpha: 0, duration: .3, onComplete: function () { old.el.remove(); } }); }
+      running = true; startTicking();
+      window.dispatchEvent(new CustomEvent('morrow:spawn', { detail: extras.length }));
+    }
+    stage.addEventListener('pointerdown', function (event) {
+      if (event.target.closest('.ball, [data-ch="t"]')) return;
+      if (!dropped) { drop(); return; }
+      const point = stagePoint(event);
+      spawn(point.x, Math.min(point.y, H - 60));
+    });
+    // The letters that stay are springy to the touch.
+    chars.slice(2).forEach(function (char) {
+      char.addEventListener('pointerenter', function () { if (!dropped) return; gsap.fromTo(char, { y: 0 }, { y: -16, duration: .16, yoyo: true, repeat: 1, ease: 'power2.out', overwrite: 'auto' }); });
+    });
     const replay = document.querySelector('[data-replay]');
     if (replay) replay.addEventListener('click', reset);
     ScrollTrigger.create({ trigger: stage, start: 'top 70%', once: true, onEnter: function () { setTimeout(drop, 350); } });

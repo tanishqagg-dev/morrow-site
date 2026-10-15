@@ -142,3 +142,83 @@ html[data-os="windows"] .demo-island .island-content p{font-size:28px}
 .glass-on .nav.is-dark .os-switch{background:rgba(255,255,255,.16)}
 /* liquidGL switches pointer events off on each lens; the things inside still need to be clickable. */
 .glass *{pointer-events:auto}
+
+/* ---------- Morrow, alive (vendor/alive.js) ---------- */
+.mw{display:inline-block;line-height:0;vertical-align:middle}
+.mw svg{display:block;width:100%;height:100%;overflow:visible}
+.mw-body path{fill:var(--accent)}
+.mw-eye ellipse{fill:var(--ink)}
+.hero-mascot-button .mw{width:52px;height:52px}
+.hero-mascot-button{position:relative;z-index:2}
+/* The companion */
+.buddy{position:fixed;right:22px;bottom:22px;z-index:80;width:68px;height:68px}
+.buddy-hit{display:block;width:100%;height:100%;border:0;background:none;padding:0;cursor:pointer;border-radius:50%}
+.buddy-hit .mw{width:100%;height:100%;filter:drop-shadow(0 6px 0 rgba(0,0,0,.08))}
+.buddy-say{position:absolute;right:6px;bottom:78px;margin:0;width:max-content;max-width:230px;background:var(--ink);color:var(--white);font-size:14px;font-weight:700;line-height:1.35;padding:10px 14px;border-radius:16px 16px 4px 16px;opacity:0;visibility:hidden;pointer-events:none}
+.buddy.on-dark .buddy-say{background:var(--white);color:var(--ink)}
+.buddy-hide{position:absolute;top:-8px;left:-8px;width:24px;height:24px;border-radius:50%;border:0;background:var(--ink);color:var(--white);font-size:14px;line-height:1;display:grid;place-items:center;opacity:0;transform:scale(.6);transition:opacity var(--t-hover) var(--ease-soft),transform var(--t-hover) var(--ease-soft)}
+.buddy:hover .buddy-hide,.buddy:focus-within .buddy-hide{opacity:1;transform:none}
+.buddy.on-dark .buddy-hide{background:var(--white);color:var(--ink)}
+@media(max-width:700px){.buddy{right:12px;bottom:12px;width:52px;height:52px}.buddy-say{bottom:60px;font-size:13px;max-width:200px}.buddy-hide{opacity:1;transform:none;width:20px;height:20px;font-size:12px}}
+/* Sparks and ripples */
+.spark{position:fixed;z-index:95;pointer-events:none;display:block}
+.spark svg{width:100%;height:100%;display:block}
+.spark path{fill:var(--accent)}
+.spark.ink path{fill:var(--ink)}
+.button,.os-switch button,.demo-steps button,.switch-link{position:relative;overflow:hidden;isolation:isolate}
+.ripple{position:absolute;border-radius:50%;background:currentColor;pointer-events:none;z-index:-1}
+/* A quick shine across primary buttons on hover */
+.button.primary::after{content:"";position:absolute;top:-20%;bottom:-20%;left:-40%;width:26%;background:rgba(255,255,255,.55);transform:skewX(-20deg) translateX(-120%);pointer-events:none;z-index:-1}
+@media(hover:hover){.button.primary:hover::after{transform:skewX(-20deg) translateX(620%);transition:transform .7s var(--ease-out)}}
+.button:hover svg{animation:nudge-down .7s var(--ease-soft)}
+@keyframes nudge-down{0%,100%{transform:none}40%{transform:translateY(3px)}70%{transform:translateY(-1px)}}
+.text-link span{display:inline-block;transition:transform var(--t-hover) var(--ease-soft)}
+@media(hover:hover){.text-link:hover span{transform:translate(2px,-2px) rotate(-8deg)}}
+/* Demo: Morrow listens beside the request */
+.listen{display:flex;align-items:center;gap:10px;margin-top:16px}
+.listen .mw{width:34px;height:34px}
+.listen-bars{display:flex;align-items:center;gap:3px;height:18px}
+.listen-bars i{display:block;width:3px;height:18px;border-radius:2px;background:var(--accent);transform:scaleY(.35)}
+.listen-text{font-size:13px;font-weight:700;color:var(--secondary)}
+/* Library: a Morrow sits on the picture */
+.files-media{position:relative}
+.mw-perch{position:absolute;top:30px;right:28px;width:62px;height:62px;z-index:2}
+@media(max-width:700px){.mw-perch{top:-26px;right:18px;width:50px;height:50px}}
+/* Bharat */
+.mw-bharat{width:88px;height:88px;margin-right:4px;cursor:pointer}
+@media(max-width:700px){.mw-bharat{width:64px;height:64px}}
+/* Pricing: the peek */
+.plan-wrap{position:relative;min-width:0}
+.plan-wrap .plan{position:relative;z-index:1}
+.mw-peek{position:absolute;top:0;right:48px;width:78px;height:78px;z-index:0}
+@media(max-width:700px){.mw-peek{right:24px;width:60px;height:60px}}
+/* Footer wordmark: the o's are eyes */
+.o-eyes{position:absolute;left:50%;display:flex;gap:.035em;margin-left:-.0625em;margin-top:-.0425em;pointer-events:none}
+.o-eyes i{display:block;width:.045em;height:.085em;border-radius:50%;background:var(--ink)}
+/* Scroll progress rider */
+.rider{position:fixed;top:0;left:0;right:0;height:0;z-index:70;pointer-events:none}
+.rider-line{position:absolute;top:0;left:0;width:100%;height:3px;background:var(--ink);transform:scaleX(0);transform-origin:0 50%}
+.rider .mw{position:absolute;top:3px;left:0;width:20px;height:20px}
+/* Rows answer the pointer */
+.control-rows>div,.edition-rows>div{transition:background var(--t-hover) var(--ease-soft)}
+.control-rows dt,.control-rows dd,.edition-rows dd{transition:transform var(--t-state) var(--ease-out)}
+.control-rows dt::before{content:"";display:inline-block;width:18px;height:18px;margin-right:10px;vertical-align:-3px;background:url(assets/morrow-mark-112.png) center/contain no-repeat;transition:transform var(--t-state) var(--ease-out)}
+.edition-rows dt{transition:background var(--t-hover) var(--ease-soft),color var(--t-hover) var(--ease-soft),padding var(--t-hover) var(--ease-soft);border-radius:999px;align-self:start;justify-self:start}
+@media(hover:hover){
+  .control-rows>div:hover dt,.control-rows>div:hover dd,.edition-rows>div:hover dd{transform:translateX(8px)}
+  .control-rows>div:hover dt::before{transform:rotate(180deg) scale(1.25)}
+  .edition-rows>div:hover dt{background:var(--accent);color:var(--ink);padding:4px 10px}
+  .faq summary{transition:padding var(--t-hover) var(--ease-soft)}
+  .faq summary:hover{padding-left:8px}
+  .demo-steps button:hover span{transform:scale(1.15)}
+  .footer-wordmark{cursor:default}
+}
+.demo-steps button span{transition:transform var(--t-hover) var(--ease-soft),background var(--t-hover),color var(--t-hover)}
+/* A tiny Morrow pops in when an answer opens */
+.faq details[open] summary::after{content:"";width:22px;height:22px;margin-left:auto;margin-right:14px;background:url(assets/morrow-mark-112.png) center/contain no-repeat;animation:pop-in .5s var(--ease-out)}
+@keyframes pop-in{0%{transform:scale(0) rotate(-120deg)}70%{transform:scale(1.2) rotate(10deg)}100%{transform:none}}
+.ball.mini{opacity:1;visibility:visible}
+.ball.mini img{width:100%;height:100%}
+.brand img{transform-origin:20% 60%}
+.faq details[open] summary::after{order:2}
+.faq details[open] summary>span{order:3}
